@@ -1,0 +1,47 @@
+# 构建并发布到 GitHub Pages。仓库 Settings -> Pages：Source 选「GitHub Actions」。
+# 在仓库 Variables 中设置 VITE_AGENT_BASE_URL 为可公网访问的后端根地址（如 https://api.example.com），
+# 且后端需为 GitHub Pages 来源配置 CORS；否则仅静态页可打开，接口会失败。
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+        env:
+          VITE_AGENT_BASE_URL: ${{ vars.VITE_AGENT_BASE_URL }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
