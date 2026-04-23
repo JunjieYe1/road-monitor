@@ -1,0 +1,404 @@
+/* =====================================================
+   道路病害监测平台 — 全局设计系统
+   风格：新拟态（Neumorphism）+ 原神 UI 配色
+   =====================================================
+
+   ┌─ 新拟态设计原则 ──────────────────────────────────┐
+   │                                                    │
+   │  光源方向：左上角 (145deg)                          │
+   │  亮面在左上 → 暗面在右下                            │
+   │                                                    │
+   │  层级关系（由低到高）：                              │
+   │   页面底色 --bg-page   #C8CDD8  ← 最暗，"地面"     │
+   │   深槽背景 --bg-groove #D4D9E2  ← 内容凹槽         │
+   │   凹陷背景 --bg-concave-from #D2D7E0               │
+   │   卡片背景 --bg-color  #E8EDF2  ← 浮在地面上       │
+   │   高光面   --bg-light  #F0F4F8  ← 受光最亮面       │
+   │                                                    │
+   │  三种深度元件（对应三个类）：                        │
+   │   .neu-card   → 从页面浮起（外凸，最高层）           │
+   │   .neu-inset  → 嵌入卡片（内凹，用于输入框等）       │
+   │   .neu-groove → 深槽（内容聚合区，聊天区/列表区）    │
+   │   .neu-btn    → 可交互按钮（凸起 + hover/active）   │
+   │   .neu-card-sm → 卡片内部的小凸起（告警条目等）      │
+   │                                                    │
+   │  凸起配方：外阴影（右下深）+ 外高光（左上亮）         │
+   │            + 渐变背景（左上亮→右下暗）               │
+   │            + 1px 白色高光边框                       │
+   │                                                    │
+   │  凹陷配方：内阴影（左上深）+ 内高光（右下亮）         │
+   │            + 反向渐变背景（左上暗→右下亮）            │
+   │                                                    │
+   │  新增组件时，按以上规则从变量中取值，               │
+   │  禁止在组件中硬编码背景色和阴影色数值。              │
+   │                                                    │
+   │  纵向滚动 / 溢出：见「纵向滚动策略」与               │
+   │  .u-scrollbar-hidden（配合 useAdaptiveVerticalScroll）│
+   │                                                    │
+   │  阴影 / 描边 / 字体 Token：见 :root 中               │
+   │  --neu-extrude-*、--neu-inset-*、--neu-stroke-*、    │
+   │  --neu-glow-*（渐变按钮彩色投影）、                  │
+   │  --font-ui / --font-display                         │
+   └────────────────────────────────────────────────── ┘
+
+   ===================================================== */
+
+/* Google Fonts 已在 index.html 的 <head> 中通过 <link> 预加载，此处不重复引入 */
+
+:root {
+  /* ══════════════════════════════════════
+     新拟态光照体系
+     —— 所有背景渐变、阴影均从此派生，
+        修改这组变量即可整体换色调。
+     ══════════════════════════════════════ */
+
+  /* 统一光照角度：从左上打光，右下为阴影面 */
+  --neu-angle: 145deg;
+
+  /* 页面层次色阶（从暗到亮，对应从"地面"到"受光面"） */
+  --bg-page:   #C8CDD8;   /* 最底层：页面背景，最暗 */
+  --bg-groove: #D4D9E2;   /* 深槽层：聊天区/列表区凹槽底色 */
+  --bg-color:  #E8EDF2;   /* 卡片层：标准卡片/元素背景 */
+  --bg-light:  #F0F4F8;   /* 高光面：受光最亮处 */
+
+  /* 凸起渐变（.neu-card / .neu-card-sm）：亮面→暗面 */
+  --neu-convex-from: var(--bg-light);   /* 左上高光起点 */
+  --neu-convex-mid:  var(--bg-color);   /* 中间过渡 */
+  --neu-convex-to:   #DDE2EA;           /* 右下暗面终点 */
+
+  /* 凹陷渐变（.neu-inset）：与凸起相反，暗面→亮面 */
+  --neu-concave-from: #D2D7E0;          /* 左上暗面起点 */
+  --neu-concave-to:   var(--bg-color);  /* 右下亮面终点 */
+
+  /* 深槽渐变（.neu-groove）：比 inset 更暗，用于大面积内容区 */
+  --neu-groove-from: #CDD2DC;           /* 深槽暗面 */
+  --neu-groove-to:   var(--bg-groove);  /* 深槽亮面 */
+
+  /* 阴影色对（从环境色派生，不用纯黑） */
+  --shadow-dark:  rgba(140, 155, 180, 0.70);  /* 深阴影：蓝灰调 */
+  --shadow-light: rgba(255, 255, 255, 0.72);  /* 亮阴影：白色高光 */
+
+  /* 凸起元素边缘高光线（1px border，模拟边缘受光） */
+  --neu-border-highlight: rgba(255, 255, 255, 0.60);
+
+  /* ══════════════════════════════════════
+     外凸 / 内凹阴影阶梯（各页面重复 box-shadow 归集于此）
+     新写样式优先 var(--neu-extrude-*) / var(--neu-inset-*)，勿复制整串阴影。
+     ══════════════════════════════════════ */
+  --neu-extrude-xs: 2px 2px 4px var(--shadow-dark), -2px -2px 4px var(--shadow-light);
+  --neu-extrude-sm: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
+  --neu-extrude-sm-deep: 2px 2px 8px var(--shadow-dark), -2px -2px 8px var(--shadow-light);
+  --neu-extrude-back: 2px 2px 6px var(--shadow-dark), -2px -2px 6px var(--shadow-light);
+  --neu-extrude-md: 3px 3px 8px var(--shadow-dark), -3px -3px 8px var(--shadow-light);
+  --neu-extrude-chip: 3px 3px 7px var(--shadow-dark), -3px -3px 7px var(--shadow-light);
+  --neu-extrude-lg: 4px 4px 10px var(--shadow-dark), -4px -4px 10px var(--shadow-light);
+  --neu-extrude-lg-soft: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+  --neu-extrude-lg-up: 6px 6px 14px var(--shadow-dark), -6px -6px 14px var(--shadow-light);
+  --neu-extrude-xl: 6px 6px 16px var(--shadow-dark), -6px -6px 16px var(--shadow-light);
+  --neu-extrude-xxl: 8px 8px 20px var(--shadow-dark), -8px -8px 20px var(--shadow-light);
+  --neu-extrude-card: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+  --neu-extrude-card-sm: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+  --neu-extrude-btn: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
+  --neu-extrude-btn-hover: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+
+  --neu-inset-ctl: inset 4px 4px 9px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+  --neu-inset-groove: inset 3px 3px 8px var(--shadow-dark), inset -2px -2px 6px rgba(255, 255, 255, 0.48);
+  --neu-inset-shallow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+  --neu-inset-sm: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
+  --neu-inset-track: inset 1px 1px 3px var(--shadow-dark);
+  --neu-inset-track-lg: inset 2px 2px 4px var(--shadow-dark);
+
+  --neu-stroke-muted: rgba(163, 177, 198, 0.35);
+  --neu-stroke-muted-strong: rgba(163, 177, 198, 0.4);
+  --neu-stroke-heavy: rgba(163, 177, 198, 0.45);
+  --neu-stroke-faint: rgba(163, 177, 198, 0.3);
+
+  /* 渐变主按钮等：非对称彩色投影（与新拟态对顶光区分） */
+  --neu-glow-blue: 2px 3px 10px rgba(45, 90, 123, 0.28);
+  --neu-glow-blue-soft: 2px 3px 10px rgba(45, 90, 123, 0.25);
+  --neu-glow-blue-strong: 2px 3px 10px rgba(45, 90, 123, 0.3);
+  --neu-glow-blue-deep: 2px 3px 10px rgba(45, 90, 123, 0.35);
+  --neu-glow-blue-hover: 3px 5px 14px rgba(45, 90, 123, 0.35);
+  --neu-glow-blue-lift: 3px 5px 14px rgba(45, 90, 123, 0.28);
+  --neu-glow-blue-hover-strong: 3px 5px 14px rgba(45, 90, 123, 0.4);
+  --neu-glow-success: 2px 3px 10px rgba(92, 173, 138, 0.28);
+  --neu-glow-success-soft: 2px 3px 10px rgba(92, 173, 138, 0.25);
+  --neu-glow-success-strong: 2px 3px 10px rgba(92, 173, 138, 0.3);
+  --neu-glow-success-hover: 3px 5px 14px rgba(92, 173, 138, 0.28);
+  --neu-glow-gold: 2px 3px 10px rgba(212, 168, 83, 0.3);
+  --neu-glow-gold-frame: 0 3px 10px rgba(212, 168, 83, 0.4);
+  --neu-glow-danger: 2px 3px 10px rgba(224, 112, 112, 0.25);
+  --neu-glow-analyze: 2px 3px 12px rgba(45, 90, 123, 0.3);
+
+  --font-ui: 'Noto Sans SC', sans-serif;
+  --font-display: 'Noto Serif SC', serif;
+
+  /* ══════════════════════════════════════
+     原神风格配色
+     ══════════════════════════════════════ */
+  --genshin-gold:       #D4A853;
+  --genshin-gold-light: #F0D78C;
+  --genshin-gold-dark:  #B8923F;
+  --genshin-blue:       #2D5A7B;
+  --genshin-blue-light: #4A8DB7;
+  --genshin-blue-dark:  #1A3A52;
+  --genshin-accent:     #C4956A;
+
+  /* ══════════════════════════════════════
+     状态色
+     ══════════════════════════════════════ */
+  --danger:  #E07070;
+  --warning: #E0A050;
+  --success: #5CAD8A;
+  --info:    #5A8FD0;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg-page);
+}
+
+/* ══════════════════════════════════════
+   新拟态工具类
+
+   使用规则：
+   · 容器卡片              → .neu-card
+   · 卡片内小浮块          → .neu-card-sm
+   · 输入框/小控件凹槽     → .neu-inset
+   · 聊天/列表等大内容区   → .neu-groove
+   · 可点击按钮            → .neu-btn
+   ══════════════════════════════════════ */
+
+/* ── 凸起卡片（大）
+   外阴影产生浮起感，渐变背景模拟弧面受光，高光边强化边缘 */
+.neu-card {
+  background: linear-gradient(
+    var(--neu-angle),
+    var(--neu-convex-from) 0%,
+    var(--neu-convex-mid)  55%,
+    var(--neu-convex-to)   100%
+  );
+  border-radius: 20px;
+  border: 1px solid var(--neu-border-highlight);
+  box-shadow: var(--neu-extrude-card);
+}
+
+/* ── 凸起卡片（小）
+   用于卡片内部的二级浮块，阴影强度减半 */
+.neu-card-sm {
+  background: linear-gradient(
+    var(--neu-angle),
+    var(--neu-convex-from) 0%,
+    var(--neu-convex-mid)  100%
+  );
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: var(--neu-extrude-card-sm);
+}
+
+/* ── 凹陷输入槽
+   反向渐变（暗→亮）+ inset 阴影，模拟内嵌凹入
+   适用于：输入框、单行控件、进度轨道 */
+.neu-inset {
+  background: linear-gradient(
+    var(--neu-angle),
+    var(--neu-concave-from) 0%,
+    var(--neu-concave-to)   100%
+  );
+  border-radius: 16px;
+  box-shadow: var(--neu-inset-ctl);
+}
+
+/* ── 深槽内容区
+   比 inset 更暗，用于大面积内容聚合区（聊天消息区、告警列表等）
+   消息/列表项作为 neu-card-sm 浮在槽内，形成层次 */
+.neu-groove {
+  background: linear-gradient(
+    var(--neu-angle),
+    var(--neu-groove-from) 0%,
+    var(--neu-groove-to)   100%
+  );
+  border-radius: 14px;
+  box-shadow: var(--neu-inset-groove);
+}
+
+/* ── 可交互按钮
+   静止：凸起；hover：更凸起；active：按下内凹 */
+.neu-btn {
+  background: linear-gradient(var(--neu-angle), var(--neu-convex-from), #D0D5DC);
+  border: 1px solid var(--neu-border-highlight);
+  border-radius: 12px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: var(--font-ui);
+  box-shadow: var(--neu-extrude-btn);
+}
+
+.neu-btn:hover {
+  box-shadow: var(--neu-extrude-btn-hover);
+}
+
+.neu-btn:active {
+  /* 反转渐变方向 + 改为 inset 阴影，模拟按下 */
+  background: linear-gradient(var(--neu-angle), #D0D5DC, var(--neu-convex-from));
+  box-shadow: var(--neu-inset-shallow);
+}
+
+/* ══════════════════════════════════════
+   原神风格标题
+   ══════════════════════════════════════ */
+
+.genshin-title {
+  font-family: 'Noto Serif SC', serif;
+  background: linear-gradient(135deg, var(--genshin-gold-dark), var(--genshin-gold), var(--genshin-gold-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 3px;
+  font-weight: 700;
+}
+
+.genshin-subtitle {
+  font-family: 'Noto Serif SC', serif;
+  font-weight: 600;
+  color: var(--genshin-blue-dark);
+  border-left: 3px solid var(--genshin-gold);
+  padding-left: 10px;
+}
+
+/* ══════════════════════════════════════
+   原神角落装饰
+   ══════════════════════════════════════ */
+
+.corner-decor {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+
+.corner-decor::before,
+.corner-decor::after {
+  content: '';
+  position: absolute;
+  background: var(--genshin-gold);
+}
+
+.corner-decor.tl { top: 8px; left: 8px; }
+.corner-decor.tl::before { top: 0; left: 0; width: 16px; height: 2px; }
+.corner-decor.tl::after  { top: 0; left: 0; width: 2px; height: 16px; }
+
+.corner-decor.br { bottom: 8px; right: 8px; }
+.corner-decor.br::before { bottom: 0; right: 0; width: 16px; height: 2px; }
+.corner-decor.br::after  { bottom: 0; right: 0; width: 2px; height: 16px; }
+
+.corner-decor.tr { top: 8px; right: 8px; }
+.corner-decor.tr::before { top: 0; right: 0; width: 16px; height: 2px; }
+.corner-decor.tr::after  { top: 0; right: 0; width: 2px; height: 16px; }
+
+.corner-decor.bl { bottom: 8px; left: 8px; }
+.corner-decor.bl::before { bottom: 0; left: 0; width: 16px; height: 2px; }
+.corner-decor.bl::after  { bottom: 0; left: 0; width: 2px; height: 16px; }
+
+/* ══════════════════════════════════════
+   动画
+   ══════════════════════════════════════ */
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.6); opacity: 0.4; }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.breathe  { animation: breathe 3s ease-in-out infinite; }
+.slide-in { animation: slide-in 0.3s ease forwards; }
+
+/* ══════════════════════════════════════
+   纵向滚动策略（与 useAdaptiveVerticalScroll 配套）
+
+   逻辑实现在：src/composables/useAdaptiveVerticalScroll.ts
+   可选包装组件：src/components/common/AdaptiveScrollY.vue
+
+   ── 两种模式 ────────────────────────────────────────
+
+   【A】自适应溢出 + 悬停滚动（面板 / 全页主内容列）
+       · 无纵向溢出：overflow-y 为 visible，内容可绘出容器（需祖先链勿 clip）
+       · 有溢出且未悬停：仍为 visible，默认外溢
+       · 有溢出且悬停：overflow-y 为 auto，在容器内滚动
+       · 离开后可延迟关闭滚动（默认 5s，防误触）
+       · 必须用 JS 绑定 :style="{ overflowY, overflowX }" 与 mouseenter/leave，
+         且 overflowX 须与 overflowY 成对（见下条「轴配对」），不可在 CSS 里写死
+         overflow-x: hidden 而 y 为 visible。
+
+   【B】始终可纵向滚动（长对话、长报告正文、AI 长摘要、评估详情等）
+       · 固定使用 overflow-y: auto; overflow-x: hidden;（写在组件 scoped 或此处工具类）
+       · 不使用 useAdaptiveVerticalScroll，避免依赖悬停才能滚。
+
+   ── 轴配对（重要）──────────────────────────────────
+       若 overflow-y 为 visible，则 overflow-x 也必须为 visible。
+       若一侧为 hidden/auto/scroll、另一侧为 visible，按 CSS 规范会把 visible
+       折算成 auto，导致无法真正「外溢」，表现为内容被裁切。
+       Composable 已输出：y===auto 时 x=hidden，否则 x=visible。
+
+   ── 全页主列（与 Pdf / 病害流程一致）────────────────
+       · pdf-body、defect-body：模式 A + flex:1; min-height:0;
+       · 父级页面容器多为 overflow:hidden + 100vh，外溢仅到页面边缘内有效。
+
+   ── 父级链 ─────────────────────────────────────────
+       需要外溢时，中间栏等祖先应允许 overflow: visible（见 Workspace / Canvas）。
+
+   ── 工具类 .u-scrollbar-hidden ─────────────────────
+       隐藏滚动条（Firefox scrollbar-width + WebKit ::-webkit-scrollbar）。
+       · 模式 A：滚动根上配合 composable 的 overflow 内联样式。
+       · 模式 B：与 overflow-y:auto 同用，长对话/报告/摘要等。
+       · 横向滚动区（画布标签栏 .tabs-list、看板 .kanban-wrap、流程
+         .stages-row）也可加，避免露出横向滚动条细轨。
+   ══════════════════════════════════════ */
+
+.u-scrollbar-hidden {
+  scrollbar-width: none;
+}
+.u-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* ══════════════════════════════════════
+   滚动条（全局默认，细条；与 .u-scrollbar-hidden 互不冲突：后者隐藏滚动条）
+   ══════════════════════════════════════ */
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(163, 177, 198, 0.45);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(163, 177, 198, 0.75);
+}
