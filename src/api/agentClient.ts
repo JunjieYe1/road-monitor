@@ -2,7 +2,7 @@
 
 const TOKEN_KEY = 'road_monitor_agent_token'
 
-/** 与 `vite.config.ts` 中默认代理目标一致，供 GitHub Pages 等无构建变量时可访问公网 API */
+/** 与接口文档默认服务地址一致；生产构建未设 VITE_AGENT_BASE_URL 时使用 */
 const DEFAULT_PUBLIC_AGENT_BASE = 'http://47.114.93.164:8000'
 
 export function getAgentBaseUrl(): string {
