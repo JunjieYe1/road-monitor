@@ -31,7 +31,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_AGENT_BASE_URL: ${{ vars.VITE_AGENT_BASE_URL }}
+          VITE_AGENT_BASE_URL: ${{ vars.VITE_AGENT_BASE_URL || 'http://47.114.93.164:8000' }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
