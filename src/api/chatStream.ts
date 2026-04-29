@@ -1,10 +1,50 @@
 import { getAgentBaseUrl, agentToken, triggerAgentUnauthorized } from './agentClient'
 
+/** SSE `map_control` 中单条病害点位（与后端字段对齐） */
+export interface MapControlItem {
+  disease_name: string
+  disease_category: string
+  disease_level: string
+  longitude: number
+  latitude: number
+}
+
+export interface MapControlPayload {
+  count: number
+  items: MapControlItem[]
+}
+
+function parseMapControlPayload(raw: unknown): MapControlPayload | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const itemsRaw = o.items
+  if (!Array.isArray(itemsRaw)) return null
+  const items: MapControlItem[] = []
+  for (const row of itemsRaw) {
+    if (!row || typeof row !== 'object') continue
+    const r = row as Record<string, unknown>
+    const lng = Number(r.longitude)
+    const lat = Number(r.latitude)
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue
+    items.push({
+      disease_name: String(r.disease_name ?? ''),
+      disease_category: String(r.disease_category ?? ''),
+      disease_level: String(r.disease_level ?? ''),
+      longitude: lng,
+      latitude: lat,
+    })
+  }
+  const count =
+    typeof o.count === 'number' && Number.isFinite(o.count) ? o.count : items.length
+  return { count, items }
+}
+
 export type ChatStreamEvent =
   | { kind: 'meta'; id_user: number; id_assistant: number; message_id: string; group_id: number }
   | { kind: 'token'; content: string }
   | { kind: 'deepthought'; content: string }
   | { kind: 'title'; content: string }
+  | { kind: 'map_control'; data: MapControlPayload }
   | { kind: 'done'; message_id?: string; group_id?: number }
   | { kind: 'error'; message: string; traceback?: string; message_id?: string; group_id?: number }
 
@@ -39,6 +79,10 @@ function parseSseDataLine(line: string, onEvent: (e: ChatStreamEvent) => void) {
         message_id: data.message_id as string | undefined,
         group_id: data.group_id as number | undefined,
       })
+    else if (t === 'map_control') {
+      const parsed = parseMapControlPayload(data.data)
+      if (parsed) onEvent({ kind: 'map_control', data: parsed })
+    }
   } catch {
     /* 忽略损坏行 */
   }

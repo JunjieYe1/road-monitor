@@ -15,7 +15,7 @@
         </div>
         <!-- 类型筛选（仅病害分布层显示）-->
         <transition name="fade-in">
-          <div v-if="activeLayer === 'defect'" class="filter-group">
+          <div v-if="activeLayer === 'defect' && !hasOverlay" class="filter-group">
             <button
               v-for="f in filters"
               :key="f.key"
@@ -50,27 +50,30 @@
       >
         <!-- 病害分布标记 -->
         <template v-if="activeLayer === 'defect'">
-          <tdt-marker
-            v-for="alert in filteredAlerts"
-            :key="alert.id"
-            :position="[alert.lng, alert.lat]"
-            :icon="severityIcon(alert.severity)"
-            :draggable="false"
-            @click="() => onMarkerClick(alert)"
-          />
+          <template v-if="hasOverlay">
+            <tdt-marker
+              v-for="row in overlayRows"
+              :key="row.id"
+              :position="[row.lng, row.lat]"
+              :icon="severityIcon(row.severity)"
+              :draggable="false"
+              @click="() => onOverlayMarkerClick(row)"
+            />
+          </template>
+          <template v-else>
+            <tdt-marker
+              v-for="alert in filteredAlerts"
+              :key="alert.id"
+              :position="[alert.lng, alert.lat]"
+              :icon="severityIcon(alert.severity)"
+              :draggable="false"
+              @click="() => onMarkerClick(alert)"
+            />
+          </template>
           <tdt-infowindow v-model:target="infoTarget" :content="infoContent" :offset="[0, -36]" />
         </template>
 
-        <!-- 热力图层（CSS色块模拟） -->
-        <template v-if="activeLayer === 'heat'">
-          <tdt-marker
-            v-for="alert in alertStore.alerts"
-            :key="'h-' + alert.id"
-            :position="[alert.lng, alert.lat]"
-            :icon="heatIcon(alert.severity)"
-            :draggable="false"
-          />
-        </template>
+        <!-- 热力图层：heatmap.js Canvas 叠加（见 composable/useTiandituHeatmap） -->
 
         <!-- 健康度评估标记 -->
         <template v-if="activeLayer === 'health'">
@@ -85,9 +88,24 @@
         </template>
       </tdt-map>
 
+      <!-- 智能体查询病害浮层 -->
+      <transition name="popup">
+        <div v-if="selectedOverlay && activeLayer === 'defect' && hasOverlay" class="alert-popup overlay-agent-popup">
+          <button class="popup-close" @click="closePopup">✕</button>
+          <div class="popup-header">
+            <SeverityBadge :level="selectedOverlay.severity" />
+            <span class="popup-type">{{ selectedOverlay.disease_name || '病害点' }}</span>
+          </div>
+          <div class="popup-addr">📍 {{ selectedOverlay.disease_category }} · 等级 {{ selectedOverlay.disease_level }}</div>
+          <div class="popup-desc overlay-coords">
+            坐标 {{ selectedOverlay.lat.toFixed(6) }}, {{ selectedOverlay.lng.toFixed(6) }}
+          </div>
+        </div>
+      </transition>
+
       <!-- 告警详情浮层 -->
       <transition name="popup">
-        <div v-if="alertStore.selectedAlert && activeLayer === 'defect'" class="alert-popup">
+        <div v-if="alertStore.selectedAlert && activeLayer === 'defect' && !hasOverlay" class="alert-popup">
           <button class="popup-close" @click="closePopup">✕</button>
           <div class="popup-header">
             <SeverityBadge :level="alertStore.selectedAlert.severity" />
@@ -154,26 +172,61 @@
           </div>
         </div>
       </transition>
+
+      <!-- 热力图风险图例 -->
+      <transition name="fade-in">
+        <div v-if="activeLayer === 'heat'" class="heat-legend neu-card">
+          <div class="legend-title">风险热力</div>
+          <p class="heat-legend-hint">
+            核密度加权（heatmap.js）：病害越密、等级越高颜色越偏黄红；高危点核半径与权重更大。平移缩放后自动贴合底图。
+          </p>
+          <div class="heat-legend-row">
+            <span
+              class="heat-strip"
+              :style="{ background: heatScaleGradient }"
+            />
+            <span class="heat-legend-text">浅绿 → 黄 → 深红（加权密度递增）</span>
+          </div>
+        </div>
+      </transition>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick, shallowRef, markRaw } from 'vue'
+import { useTiandituHeatmap } from '../../../composables/useTiandituHeatmap'
 import { useRouter } from 'vue-router'
 import { useAlertStore, type AlertPoint } from '../../../stores/alertStore'
 import { useChatStore } from '../../../stores/chatStore'
-import { SEV_COLORS, statusLabel } from '../../../utils/labels'
+import { useMapOverlayStore } from '../../../stores/mapOverlayStore'
+import {
+  defectCategoryColor,
+  SEV_COLORS,
+  statusLabel,
+} from '../../../utils/labels'
 import SeverityBadge from '../../common/SeverityBadge.vue'
+
+interface OverlayMapRow {
+  id: string
+  lng: number
+  lat: number
+  severity: 'high' | 'medium' | 'low'
+  disease_name: string
+  disease_category: string
+  disease_level: string
+}
 
 const router = useRouter()
 const alertStore = useAlertStore()
 const chatStore = useChatStore()
+const mapOverlayStore = useMapOverlayStore()
 
 const loadConfig = { v: '4.0', tk: '7db4d1823b7788dc88066899e23df0d5' }
 const mapCenter = ref([120.155, 30.274])
 const mapZoom = ref(12)
-const mapInstance = ref<any>(null)
+/** 天地图实例勿用 ref() 深响应，否则会把 T.Map 包成 Proxy，坐标 API 失效 */
+const mapInstance = shallowRef<any>(null)
 const infoTarget = ref<any>(null)
 const infoContent = ref('')
 
@@ -185,15 +238,21 @@ const layers = [
 ]
 const activeLayer = ref<string>('defect')
 
-/* ── 类型筛选 ── */
+/* ── 类型筛选（与当前数据中出现的病害分类一致） ── */
 const activeFilter = ref<string>('all')
-const filters = [
-  { key: '裂缝', label: '裂缝', color: '#E07070' },
-  { key: '坑槽', label: '坑槽', color: '#E0A050' },
-  { key: '沉陷', label: '沉陷', color: '#2D5A7B' },
-  { key: '车辙', label: '车辙', color: '#5A8FD0' },
-  { key: '其他', label: '其他', color: '#5CAD8A' },
-]
+const filters = computed(() => {
+  const keys = [...new Set(alertStore.alerts.map((a) => a.type))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  return [
+    { key: 'all', label: '全部', color: '#7A8899' },
+    ...keys.map((key) => ({
+      key,
+      label: key,
+      color: defectCategoryColor(key),
+    })),
+  ]
+})
 
 const filteredAlerts = computed(() =>
   activeFilter.value === 'all'
@@ -201,14 +260,67 @@ const filteredAlerts = computed(() =>
     : alertStore.alerts.filter(a => a.type === activeFilter.value)
 )
 
-const severityStats = computed(() =>
-  (['high', 'medium', 'low'] as const).map(key => ({
+function diseaseLevelToSeverity(level: string): 'high' | 'medium' | 'low' {
+  const s = level.trim()
+  if (/Ⅲ|III|^3$/i.test(s)) return 'high'
+  if (/Ⅱ|II|^2$/i.test(s)) return 'medium'
+  return 'low'
+}
+
+const overlayRows = computed<OverlayMapRow[]>(() =>
+  mapOverlayStore.points.map((p, i) => ({
+    id: `agent-${i}-${p.longitude}-${p.latitude}`,
+    lng: p.longitude,
+    lat: p.latitude,
+    severity: diseaseLevelToSeverity(p.disease_level),
+    disease_name: p.disease_name,
+    disease_category: p.disease_category,
+    disease_level: p.disease_level,
+  })),
+)
+
+const hasOverlay = computed(() => overlayRows.value.length > 0)
+
+const severityStats = computed(() => {
+  const keys = ['high', 'medium', 'low'] as const
+  if (hasOverlay.value) {
+    const counts = { high: 0, medium: 0, low: 0 }
+    for (const r of overlayRows.value) counts[r.severity]++
+    return keys.map(key => ({
+      key,
+      label: key === 'high' ? '高危' : key === 'medium' ? '中危' : '低危',
+      color: SEV_COLORS[key],
+      count: counts[key],
+    }))
+  }
+  return keys.map(key => ({
     key,
     label: key === 'high' ? '高危' : key === 'medium' ? '中危' : '低危',
     color: SEV_COLORS[key],
     count: alertStore.severitySummary[key],
   }))
-)
+})
+
+const heatMarkers = computed(() => {
+  if (hasOverlay.value) {
+    return overlayRows.value.map(r => ({
+      key: `oh-${r.id}`,
+      lng: r.lng,
+      lat: r.lat,
+      severity: r.severity,
+    }))
+  }
+  return alertStore.alerts.map(a => ({
+    key: `h-${a.id}`,
+    lng: a.lng,
+    lat: a.lat,
+    severity: a.severity,
+  }))
+})
+
+/** 与 useTiandituHeatmap 中 RISK_GRADIENT 一致示意 */
+const heatScaleGradient =
+  'linear-gradient(90deg, rgba(92,173,138,0.85), rgba(224,180,96,0.9), rgba(200,48,48,1))'
 
 /* ── 图标生成 ── */
 function makeSvgIcon(color: string, opacity = 0.92): string {
@@ -227,17 +339,6 @@ const ICONS: Record<string, string> = {
   low:    makeSvgIcon(SEV_COLORS.low),
 }
 const severityIcon = (s: string) => ICONS[s] || ICONS.low
-
-function heatIcon(severity: string): string {
-  const colors: Record<string, string> = {
-    high: 'rgba(224,80,80,0.55)', medium: 'rgba(224,160,80,0.45)', low: 'rgba(92,173,138,0.35)'
-  }
-  const sizes: Record<string, number> = { high: 48, medium: 36, low: 24 }
-  const c = colors[severity] || colors.low
-  const s = sizes[severity] || 24
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}"><circle cx="${s/2}" cy="${s/2}" r="${s/2}" fill="${c}"/></svg>`
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
-}
 
 const HEALTH_COLORS = { great: '#5CAD8A', good: '#A8C87A', fair: '#E0C050', poor: '#E09050', bad: '#E07070' }
 function healthIcon(score: number): string {
@@ -273,9 +374,100 @@ function healthClass(score: number) {
   return score >= 85 ? 'great' : score >= 70 ? 'good' : score >= 55 ? 'fair' : score >= 40 ? 'poor' : 'bad'
 }
 
-function onMapInit(map: any) { mapInstance.value = map }
+const selectedOverlay = ref<OverlayMapRow | null>(null)
+
+function fitMapToPoints(coords: { lng: number; lat: number }[]) {
+  if (coords.length === 0) return
+  if (coords.length === 1) {
+    mapCenter.value = [coords[0].lng, coords[0].lat]
+    mapZoom.value = 15
+    return
+  }
+  let minLng = Infinity
+  let maxLng = -Infinity
+  let minLat = Infinity
+  let maxLat = -Infinity
+  for (const p of coords) {
+    minLng = Math.min(minLng, p.lng)
+    maxLng = Math.max(maxLng, p.lng)
+    minLat = Math.min(minLat, p.lat)
+    maxLat = Math.max(maxLat, p.lat)
+  }
+  const pad = 0.002
+  minLng -= pad
+  maxLng += pad
+  minLat -= pad
+  maxLat += pad
+  mapCenter.value = [(minLng + maxLng) / 2, (minLat + maxLat) / 2]
+  const span = Math.max(maxLng - minLng, maxLat - minLat)
+  let z = 14
+  if (span > 0.15) z = 11
+  else if (span > 0.08) z = 12
+  else if (span > 0.03) z = 13
+  mapZoom.value = z
+}
+
+watch(
+  () => mapOverlayStore.points.length,
+  len => {
+    if (len === 0) selectedOverlay.value = null
+  },
+)
+
+watch(
+  () => mapOverlayStore.points,
+  pts => {
+    if (!pts.length) return
+    nextTick(() =>
+      fitMapToPoints(pts.map(p => ({ lng: p.longitude, lat: p.latitude }))),
+    )
+  },
+  { deep: true },
+)
+
+/** 切换至热力图或热力点集合变化时，缩放到包含全部点 */
+watch(
+  [activeLayer, heatMarkers],
+  () => {
+    if (activeLayer.value !== 'heat') return
+    nextTick(() => {
+      const pts = heatMarkers.value
+      if (pts.length === 0) return
+      fitMapToPoints(pts.map(p => ({ lng: p.lng, lat: p.lat })))
+    })
+  },
+  { flush: 'post' },
+)
+
+const heatLayerActive = computed(() => activeLayer.value === 'heat')
+const { redraw: redrawHeatCanvas } = useTiandituHeatmap(mapInstance, heatMarkers, heatLayerActive)
+
+/** 程序化改 center/zoom 时兜底重绘热力 Canvas（地图动画结束事件可能延后） */
+watch([mapCenter, mapZoom], () => {
+  if (activeLayer.value !== 'heat') return
+  nextTick(() => redrawHeatCanvas())
+})
+
+function onMapInit(map: any) {
+  /** markRaw + shallowRef，避免 Vue 深响应把 T.Map 包成 Proxy，坐标 API 异常 */
+  mapInstance.value = markRaw(map)
+}
+
+function onOverlayMarkerClick(row: OverlayMapRow) {
+  selectedOverlay.value = row
+  alertStore.selectAlert(null)
+  mapCenter.value = [row.lng, row.lat]
+  infoContent.value = `
+    <div style="font-family:'Noto Sans SC',sans-serif;padding:4px 6px;min-width:140px">
+      <div style="font-weight:600;color:#1A3A52;font-size:13px">${row.disease_name || '病害点'}</div>
+      <div style="font-size:11px;color:#6B7A8C;margin-top:3px">${row.disease_category} · ${row.disease_level}</div>
+    </div>
+  `
+  setTimeout(() => { infoTarget.value = [row.lng, row.lat] }, 50)
+}
 
 function onMarkerClick(alert: AlertPoint) {
+  selectedOverlay.value = null
   alertStore.selectAlert(alert)
   mapCenter.value = [alert.lng, alert.lat]
   infoContent.value = `
@@ -295,6 +487,7 @@ function onHealthClick(road: typeof healthRoads.value[0]) {
 function onMapClick() { closePopup() }
 function closePopup() {
   alertStore.selectAlert(null)
+  selectedOverlay.value = null
   infoTarget.value = null
 }
 
@@ -472,6 +665,42 @@ function goToDefectFlow(id: number) {
 .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #5A6A7C; margin-bottom: 5px; }
 .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 .legend-range { margin-left: auto; color: #8A9AAC; }
+
+.heat-legend {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 100;
+  padding: 12px 14px;
+  border-radius: 12px;
+  min-width: 168px;
+  max-width: 220px;
+}
+.heat-legend-hint {
+  font-size: 10px;
+  color: #8a9aac;
+  line-height: 1.45;
+  margin: 0 0 10px;
+}
+.heat-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #5a6a7c;
+}
+.heat-strip {
+  flex-shrink: 0;
+  width: 56px;
+  height: 10px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.heat-legend-text {
+  flex: 1;
+  line-height: 1.35;
+}
 
 .popup-enter-active, .popup-leave-active { transition: all 0.25s ease; }
 .popup-enter-from, .popup-leave-to { opacity: 0; transform: translateX(-50%) translateY(10px); }

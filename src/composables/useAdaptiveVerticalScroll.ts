@@ -16,6 +16,10 @@ const EPS = 1
 export interface UseAdaptiveVerticalScrollOptions {
   /** 鼠标离开后有溢出时，延迟关闭滚动模式（毫秒），与左栏一致 */
   leaveDelayMs?: number
+  /**
+   * 有纵向溢出时始终使用 overflow-y:auto，不依赖悬停；离开区域后也不通过定时器收回滚动样式
+   */
+  persistScrollWhenOverflow?: boolean
 }
 
 export function useAdaptiveVerticalScroll(
@@ -23,6 +27,7 @@ export function useAdaptiveVerticalScroll(
   options: UseAdaptiveVerticalScrollOptions = {}
 ) {
   const leaveDelayMs = options.leaveDelayMs ?? 5000
+  const persistScrollWhenOverflow = options.persistScrollWhenOverflow ?? false
   const hasOverflow = ref(false)
   const isHovering = ref(false)
   let leaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -52,6 +57,7 @@ export function useAdaptiveVerticalScroll(
 
   const overflowY = computed<'visible' | 'auto'>(() => {
     if (!hasOverflow.value) return 'visible'
+    if (persistScrollWhenOverflow) return 'auto'
     return isHovering.value ? 'auto' : 'visible'
   })
 
@@ -67,6 +73,9 @@ export function useAdaptiveVerticalScroll(
 
   function onLeave() {
     clearLeaveTimer()
+    if (persistScrollWhenOverflow && hasOverflow.value) {
+      return
+    }
     if (!hasOverflow.value || leaveDelayMs <= 0) {
       isHovering.value = false
       return
@@ -119,6 +128,19 @@ export function useAdaptiveVerticalScroll(
     ro = null
   })
 
+  /** 在有纵向溢出时展开滚动条并滚到底（用于新增内容块后跟随视窗） */
+  async function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+    await remeasure()
+    const el = targetRef.value
+    if (!el) return
+    if (hasOverflow.value && !persistScrollWhenOverflow) {
+      isHovering.value = true
+    }
+    await nextTick()
+    await new Promise<void>((r) => requestAnimationFrame(() => r()))
+    el.scrollTo({ top: el.scrollHeight, behavior })
+  }
+
   return {
     hasOverflow,
     isHovering,
@@ -128,5 +150,6 @@ export function useAdaptiveVerticalScroll(
     onLeave,
     measure,
     remeasure,
+    scrollToBottom,
   }
 }
