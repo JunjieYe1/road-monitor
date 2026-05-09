@@ -158,11 +158,12 @@
       <!-- 全景洞察 -->
       <div v-else-if="mode === 'insight'" key="insight" class="panel-content">
         <StatCard
-          label="今日告警总数"
+          label="告警总数"
           :value="alertStore.totalCount"
           unit="处"
           :sub="severityItems"
         />
+      
         <div class="neu-card status-card">
           <div class="genshin-subtitle sec-title">处理状态概览</div>
           <StatusBarList :items="statusBars" :total="total" fill-by-key />
@@ -550,6 +551,15 @@ watch(
 .panel-empty {
   font-size: 12px;
   color: #8a9aac;
+}
+.map-debug-card {
+  font-size: 11px;
+  color: #4a5d70;
+}
+.map-debug-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+  line-height: 1.5;
 }
 
 /* 报告侧栏 */

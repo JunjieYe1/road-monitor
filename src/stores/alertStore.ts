@@ -1,6 +1,9 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
+import type { MapControlPayload } from "../api/chatStream";
 import { defectCategoryColor } from "../utils/labels";
+import { formatLocaleTimeHm } from "../utils/localeFormat";
+import { diseaseLevelToSeverity } from "../utils/severity";
 import {
   getRecheckAlertsJsonPath,
   shouldLoadRecheckAlerts,
@@ -18,6 +21,22 @@ export interface AlertPoint {
   time: string;
   status: "pending" | "processing" | "completed";
   description?: string;
+}
+
+interface SeveritySummary {
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface MapControlDebugSnapshot {
+  eventSeq: number;
+  phase: "applied" | "restored";
+  receivedCount: number;
+  itemsLength: number;
+  computedSeverity: SeveritySummary;
+  sampleLevels: string[];
+  timestamp: string;
 }
 
 const SEV = new Set<AlertPoint["severity"]>(["high", "medium", "low"]);
@@ -87,6 +106,10 @@ function parseAlertPointArray(data: unknown): AlertPoint[] {
     out.push(row);
   }
   return out;
+}
+
+function cloneAlerts(rows: AlertPoint[]): AlertPoint[] {
+  return rows.map((row) => ({ ...row }));
 }
 
 const FALLBACK_ALERTS: AlertPoint[] = [
@@ -239,9 +262,79 @@ const FALLBACK_ALERTS: AlertPoint[] = [
 export const useAlertStore = defineStore("alert", () => {
   const alerts = ref<AlertPoint[]>([...FALLBACK_ALERTS]);
   const alertsLoadedFrom = ref<"fallback" | "recheck">("fallback");
+  const hasLoadedBaseAlerts = ref(false);
   const selectedAlert = ref<AlertPoint | null>(null);
 
-  const totalCount = computed(() => alerts.value.length);
+  const mapControlCount = ref<number | null>(null);
+  const mapControlSeveritySummary = ref<SeveritySummary | null>(null);
+  const mapControlDebug = ref<MapControlDebugSnapshot | null>(null);
+  const mapControlSnapshot = ref<AlertPoint[] | null>(null);
+  let mapControlSeed = 1;
+
+  const totalCount = computed(() => mapControlCount.value ?? alerts.value.length);
+
+  function setMapControlCount(count: number | null) {
+    mapControlCount.value = count;
+  }
+
+  function applyMapControlPayload(payload: MapControlPayload, eventSeq = 0) {
+    if (!mapControlSnapshot.value) {
+      mapControlSnapshot.value = cloneAlerts(alerts.value);
+    }
+    const now = formatLocaleTimeHm();
+    alerts.value = payload.items.map((item) => ({
+      id: mapControlSeed++,
+      lat: item.latitude,
+      lng: item.longitude,
+      type: item.disease_category || "未分类",
+      severity: diseaseLevelToSeverity(item.disease_level),
+      district: "智能体查询",
+      address: `${item.longitude.toFixed(6)}, ${item.latitude.toFixed(6)}`,
+      time: now,
+      status: "pending",
+      description: item.disease_name || item.disease_category || "智能体返回病害点位",
+    }));
+    const severityCounter: SeveritySummary = { high: 0, medium: 0, low: 0 };
+    for (const row of alerts.value) {
+      severityCounter[row.severity] += 1;
+    }
+    mapControlSeveritySummary.value = severityCounter;
+    mapControlCount.value = payload.count;
+    mapControlDebug.value = {
+      eventSeq,
+      phase: "applied",
+      receivedCount: payload.count,
+      itemsLength: payload.items.length,
+      computedSeverity: { ...severityCounter },
+      sampleLevels: payload.items.slice(0, 3).map((item) => item.disease_level),
+      timestamp: new Date().toISOString(),
+    };
+    selectedAlert.value = null;
+  }
+
+  function restoreAlertsAfterMapControl() {
+    if (!mapControlSnapshot.value) return;
+    const prevCount = mapControlCount.value ?? 0;
+    const prevSeverity = mapControlSeveritySummary.value ?? {
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+    alerts.value = cloneAlerts(mapControlSnapshot.value);
+    mapControlSnapshot.value = null;
+    mapControlCount.value = null;
+    mapControlSeveritySummary.value = null;
+    mapControlDebug.value = {
+      eventSeq: mapControlDebug.value?.eventSeq ?? 0,
+      phase: "restored",
+      receivedCount: prevCount,
+      itemsLength: 0,
+      computedSeverity: { ...prevSeverity },
+      sampleLevels: [],
+      timestamp: new Date().toISOString(),
+    };
+    selectedAlert.value = null;
+  }
 
   const typeDistribution = computed(() => {
     const map: Record<string, number> = {};
@@ -263,18 +356,24 @@ export const useAlertStore = defineStore("alert", () => {
     completed: alerts.value.filter((a) => a.status === "completed").length,
   }));
 
-  const severitySummary = computed(() => ({
-    high: alerts.value.filter((a) => a.severity === "high").length,
-    medium: alerts.value.filter((a) => a.severity === "medium").length,
-    low: alerts.value.filter((a) => a.severity === "low").length,
-  }));
+  const severitySummary = computed<SeveritySummary>(() => {
+    if (mapControlSeveritySummary.value) return mapControlSeveritySummary.value;
+    return {
+      high: alerts.value.filter((a) => a.severity === "high").length,
+      medium: alerts.value.filter((a) => a.severity === "medium").length,
+      low: alerts.value.filter((a) => a.severity === "low").length,
+    };
+  });
 
   function selectAlert(alert: AlertPoint | null) {
     selectedAlert.value = alert;
   }
 
   async function loadRecheckAlerts(): Promise<void> {
-    if (!shouldLoadRecheckAlerts()) return;
+    if (!shouldLoadRecheckAlerts()) {
+      hasLoadedBaseAlerts.value = true;
+      return;
+    }
     const url = getRecheckAlertsJsonPath();
     try {
       const res = await fetch(url, { cache: "no-cache" });
@@ -287,12 +386,15 @@ export const useAlertStore = defineStore("alert", () => {
     } catch {
       alerts.value = [...FALLBACK_ALERTS];
       alertsLoadedFrom.value = "fallback";
+    } finally {
+      hasLoadedBaseAlerts.value = true;
     }
   }
 
   return {
     alerts,
     alertsLoadedFrom,
+    hasLoadedBaseAlerts,
     selectedAlert,
     totalCount,
     typeDistribution,
@@ -300,5 +402,11 @@ export const useAlertStore = defineStore("alert", () => {
     severitySummary,
     selectAlert,
     loadRecheckAlerts,
+    mapControlCount,
+    mapControlSeveritySummary,
+    mapControlDebug,
+    setMapControlCount,
+    applyMapControlPayload,
+    restoreAlertsAfterMapControl,
   };
 });

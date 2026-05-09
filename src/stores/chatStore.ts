@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import type { AlertPoint } from "./alertStore";
+import { useAlertStore, type AlertPoint } from "./alertStore";
 import { useCanvasStore, type CanvasViewType } from "./canvasStore";
 import { useMapOverlayStore } from "./mapOverlayStore";
 import { sevLabel, statusLabel } from "../utils/labels";
@@ -100,6 +100,8 @@ function applyUiContextFromHint(hint: UiContextHint | null) {
 }
 
 export const useChatStore = defineStore("chat", () => {
+  const alertStore = useAlertStore();
+  let mapControlEventSeq = 0;
   const messages = ref<ChatMessage[]>(welcomeMessages());
   let nextId = 2;
   const isLoading = ref(false);
@@ -307,6 +309,7 @@ export const useChatStore = defineStore("chat", () => {
   async function sendMessage(content: string) {
     if (!content.trim() || isLoading.value) return;
 
+    alertStore.restoreAlertsAfterMapControl();
     useMapOverlayStore().clear();
 
     const ctx = attachedAlert.value;
@@ -414,6 +417,8 @@ export const useChatStore = defineStore("chat", () => {
         } else if (ev.kind === "map_control") {
           useMapOverlayStore().replace(ev.data);
           useCanvasStore().pushTab({ type: "map" });
+          mapControlEventSeq += 1;
+          alertStore.applyMapControlPayload(ev.data, mapControlEventSeq);
         } else if (ev.kind === "error") {
           sawDone = true;
           acc += (acc ? "\n\n" : "") + `[错误] ${ev.message}`;

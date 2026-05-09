@@ -1,15 +1,10 @@
 <template>
   <div class="pdf-page">
     <header class="pdf-header neu-card">
-      <button class="back-btn" @click="$router.push('/workspace')">
+      <button class="back-btn" @click="$router.push('/')">
         <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
-          <path
-            d="M12 4l-6 6 6 6"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
+          <path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+            stroke-linejoin="round" />
         </svg>
         返回工作台
       </button>
@@ -21,13 +16,8 @@
       <span class="header-time">{{ currentTime }}</span>
     </header>
 
-    <div
-      class="pdf-body u-scrollbar-hidden"
-      ref="pdfBodyRef"
-      :style="{ overflowY, overflowX }"
-      @mouseenter="onEnter"
-      @mouseleave="onLeave"
-    >
+    <div class="pdf-body u-scrollbar-hidden" ref="pdfBodyRef" :style="{ overflowY, overflowX }" @mouseenter="onEnter"
+      @mouseleave="onLeave">
       <!-- 知识库列表 -->
       <section class="neu-card pdf-section">
         <div class="sec-title-row">
@@ -36,31 +26,23 @@
             <span class="kb-pick-hint">（可多选，检索范围将随提问提交）</span>
           </div>
           <div class="entry-actions">
-            <button class="entry-btn" type="button" disabled title="功能建设中">
+            <button class="entry-btn" type="button" title="功能建设中">
               数据录入
             </button>
-            <button class="entry-btn" type="button" disabled title="功能建设中">
+            <button class="entry-btn" type="button" title="功能建设中">
               数据导入
             </button>
           </div>
         </div>
         <div class="kb-list">
-          <div
-            v-for="kb in kbList"
-            :key="kb.id"
-            class="kb-card"
-            :class="{ active: chatStore.isKbSelected(kb.id) }"
-          >
+          <div v-for="kb in kbList" :key="kb.id" class="kb-card" :class="{ active: chatStore.isKbSelected(kb.id) }">
             <div class="kb-year">{{ kb.range }}</div>
             <div class="kb-meta">
               <span>📄 {{ kb.reports }} 份报告</span>
               <span>🗂️ {{ kb.records }} 条记录</span>
               <span>💡 {{ kb.knowledge }} 知识点</span>
             </div>
-            <div
-              class="kb-badge"
-              :class="chatStore.isKbSelected(kb.id) ? 'kb-on' : 'kb-off'"
-            >
+            <div class="kb-badge" :class="chatStore.isKbSelected(kb.id) ? 'kb-on' : 'kb-off'">
               {{ chatStore.isKbSelected(kb.id) ? "● 已选入对话" : "○ 未选" }}
             </div>
             <div class="kb-btns">
@@ -95,31 +77,14 @@
               <option value="Q4">Q4（10-12月）</option>
             </select>
             <span class="req-hint">* 必填，用于知识库分类</span>
-            <button
-              class="quick-import-btn"
-              type="button"
-              @click="useLastImport"
-            >
+            <button class="quick-import-btn" type="button" @click="useLastImport">
               使用上次导入（免上传）
             </button>
           </div>
 
-          <div
-            class="drop-zone"
-            :class="{ dragover: isDrag }"
-            @dragover.prevent="isDrag = true"
-            @dragleave="isDrag = false"
-            @drop.prevent="onDrop"
-            @click="fileEl?.click()"
-          >
-            <input
-              ref="fileEl"
-              type="file"
-              accept=".pdf"
-              multiple
-              style="display: none"
-              @change="onFile"
-            />
+          <div class="drop-zone" :class="{ dragover: isDrag }" @dragover.prevent="isDrag = true"
+            @dragleave="isDrag = false" @drop.prevent="onDrop" @click="fileEl?.click()">
+            <input ref="fileEl" type="file" accept=".pdf" multiple style="display: none" @change="onFile" />
             <div class="dz-icon">📄</div>
             <div class="dz-text">拖拽 PDF 至此，或点击选择</div>
             <div class="dz-sub">支持批量上传 · 仅限 PDF</div>
@@ -131,11 +96,7 @@
               <span class="file-list-count">共 {{ uploadListRows.length }} 个</span>
             </div>
             <ul class="file-list" role="list">
-              <li
-                v-for="row in uploadListRows"
-                :key="row.key"
-                class="file-row"
-              >
+              <li v-for="row in uploadListRows" :key="row.key" class="file-row">
                 <div class="file-row-lead" aria-hidden="true">
                   <span class="file-row-icon">PDF</span>
                 </div>
@@ -143,24 +104,15 @@
                   <span class="fi-name" :title="row.name">{{ row.name }}</span>
                   <span class="fi-size-badge">{{ sizeLabelForRow(row) }}</span>
                 </div>
-                <button
-                  type="button"
-                  class="fi-del"
-                  title="从列表中移除"
-                  aria-label="移除该文件"
-                  @click.stop.prevent="removeUploadRow(row)"
-                >
+                <button type="button" class="fi-del" title="从列表中移除" aria-label="移除该文件"
+                  @click.stop.prevent="removeUploadRow(row)">
                   <span class="fi-del-x" aria-hidden="true">×</span>
                 </button>
               </li>
             </ul>
           </div>
 
-          <button
-            class="submit-btn"
-            :disabled="!canStartProcess || !selYear || isProcesing"
-            @click="startProcess"
-          >
+          <button class="submit-btn" :disabled="!canStartProcess || !selYear || isProcesing" @click="startProcess">
             {{ isProcesing ? "处理中..." : "开始解析处理" }}
           </button>
         </section>
@@ -177,10 +129,7 @@
               <div class="flow-node" :class="nodeClass(i)">
                 <div class="flow-circle">
                   <span v-if="i < doneSteps">✓</span>
-                  <span
-                    v-else-if="i === doneSteps && isProcesing"
-                    class="spin-dot"
-                  ></span>
+                  <span v-else-if="i === doneSteps && isProcesing" class="spin-dot"></span>
                   <span v-else>{{ i + 1 }}</span>
                 </div>
                 <div class="flow-info">
@@ -188,20 +137,10 @@
                   <div class="flow-desc">{{ step.desc }}</div>
                 </div>
               </div>
-              <div
-                v-if="i < steps.length - 1"
-                class="flow-arrow"
-                :class="{ lit: i < doneSteps }"
-              >
+              <div v-if="i < steps.length - 1" class="flow-arrow" :class="{ lit: i < doneSteps }">
                 <svg viewBox="0 0 40 12" width="40" height="12">
-                  <path
-                    d="M0 6h32M28 2l6 4-6 4"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    fill="none"
-                  />
+                  <path d="M0 6h32M28 2l6 4-6 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                    stroke-linejoin="round" fill="none" />
                 </svg>
               </div>
             </div>
@@ -259,11 +198,7 @@
           </div>
           <div class="sub-block-title">按道路等级分布</div>
           <div class="mini-bars">
-            <div
-              v-for="item in importSummary.byLevel"
-              :key="item.label"
-              class="mini-bar-row"
-            >
+            <div v-for="item in importSummary.byLevel" :key="item.label" class="mini-bar-row">
               <span class="mbr-label">{{ item.label }}</span>
               <div class="mbr-track">
                 <div class="mbr-fill" :style="{ width: item.pct + '%' }"></div>
@@ -368,18 +303,18 @@ const importedSourceName = ref("");
 
 type UploadListRow =
   | {
-      mode: "file";
-      key: string;
-      name: string;
-      sizeBytes: number;
-      fileIndex: number;
-    }
+    mode: "file";
+    key: string;
+    name: string;
+    sizeBytes: number;
+    fileIndex: number;
+  }
   | {
-      mode: "quick";
-      key: string;
-      name: string;
-      sizeBytes: number | null;
-    };
+    mode: "quick";
+    key: string;
+    name: string;
+    sizeBytes: number | null;
+  };
 
 const uploadListRows = computed((): UploadListRow[] => {
   if (files.value.length > 0) {
@@ -688,6 +623,7 @@ watch(
   gap: 16px;
   flex-shrink: 0;
 }
+
 .back-btn {
   display: flex;
   align-items: center;
@@ -703,6 +639,7 @@ watch(
   box-shadow: var(--neu-extrude-sm);
   transition: all 0.2s;
 }
+
 .header-title {
   flex: 1;
   text-align: center;
@@ -714,11 +651,13 @@ watch(
   justify-content: center;
   gap: 10px;
 }
+
 .deco {
   color: var(--genshin-gold);
   font-size: 12px;
   opacity: 0.8;
 }
+
 .header-time {
   font-size: 12px;
   color: var(--genshin-blue);
@@ -738,6 +677,7 @@ watch(
 .pdf-section {
   padding: 20px 24px;
 }
+
 .sec-title-row {
   display: flex;
   align-items: center;
@@ -746,6 +686,7 @@ watch(
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
+
 .sec-title {
   font-family: "Noto Serif SC", serif;
   font-size: 16px;
@@ -755,31 +696,35 @@ watch(
   border-left: 3px solid var(--genshin-gold);
   padding-left: 10px;
 }
+
 .kb-pick-hint {
   font-size: 11px;
   font-weight: 500;
   color: #8a9aac;
   margin-left: 6px;
 }
+
 .sec-title-row .sec-title {
   margin-bottom: 0;
 }
+
 .entry-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+
 .entry-btn {
+  border: 1px solid var(--neu-stroke-muted);
   padding: 5px 12px;
   border-radius: 10px;
-  border: 1px solid var(--neu-stroke-muted);
-  background: var(--bg-groove);
-  color: #9aa5b2;
+  cursor: pointer;
+  background: var(--bg-color);
+  color: var(--genshin-blue);
   font-size: 12px;
   font-family: "Noto Sans SC", sans-serif;
-  cursor: not-allowed;
-  box-shadow: var(--neu-inset-track-sm);
-  opacity: 0.9;
+  box-shadow: var(--neu-extrude-sm);
+  transition: all 0.2s;
 }
 
 /* 知识库卡片 */
@@ -788,6 +733,7 @@ watch(
   gap: 12px;
   flex-wrap: wrap;
 }
+
 .kb-card {
   padding: 16px 20px;
   border-radius: 16px;
@@ -799,20 +745,24 @@ watch(
   flex-direction: column;
   gap: 8px;
 }
+
 .kb-card:hover {
   transform: translateY(-2px);
 }
+
 .kb-card.active {
   box-shadow:
     var(--neu-extrude-lg),
     0 0 0 2px rgba(212, 168, 83, 0.45);
 }
+
 .kb-year {
   font-family: "Noto Serif SC", serif;
   font-size: 16px;
   font-weight: 700;
   color: var(--genshin-blue-dark);
 }
+
 .kb-meta {
   display: flex;
   flex-direction: column;
@@ -820,20 +770,25 @@ watch(
   font-size: 11px;
   color: #8a9aac;
 }
+
 .kb-badge {
   font-size: 11px;
   font-weight: 500;
 }
+
 .kb-on {
   color: #5cad8a;
 }
+
 .kb-off {
   color: #b0bac8;
 }
+
 .kb-btns {
   display: flex;
   gap: 6px;
 }
+
 .kb-btn {
   padding: 3px 10px;
   border-radius: 8px;
@@ -843,14 +798,17 @@ watch(
   font-family: "Noto Sans SC", sans-serif;
   transition: all 0.2s;
 }
+
 .kb-btn.activate {
   background: rgba(74, 141, 183, 0.1);
   color: var(--genshin-blue);
 }
+
 .kb-btn.del {
   background: rgba(224, 112, 112, 0.1);
   color: #e07070;
 }
+
 .add-kb {
   border: 2px dashed var(--neu-stroke-muted-strong);
   background: transparent !important;
@@ -860,13 +818,16 @@ watch(
   box-shadow: none !important;
   cursor: pointer;
 }
+
 .add-kb:hover {
   border-color: var(--genshin-blue);
 }
+
 .add-plus {
   font-size: 24px;
   color: #b0bac8;
 }
+
 .add-text {
   font-size: 12px;
   color: #b0bac8;
@@ -880,11 +841,13 @@ watch(
   margin-bottom: 14px;
   flex-wrap: wrap;
 }
+
 .field-req {
   font-size: 13px;
   font-weight: 600;
   color: var(--genshin-blue-dark);
 }
+
 .range-sel {
   padding: 6px 10px;
   border-radius: 8px;
@@ -895,10 +858,12 @@ watch(
   cursor: pointer;
   outline: none;
 }
+
 .req-hint {
   font-size: 11px;
   color: #e07070;
 }
+
 .quick-import-btn {
   padding: 6px 12px;
   border-radius: 8px;
@@ -909,6 +874,7 @@ watch(
   font-family: "Noto Sans SC", sans-serif;
   cursor: pointer;
 }
+
 .drop-zone {
   border: 2px dashed var(--neu-stroke-heavy);
   border-radius: 16px;
@@ -922,35 +888,39 @@ watch(
   align-items: center;
   gap: 8px;
 }
+
 .drop-zone.dragover,
 .drop-zone:hover {
   border-color: var(--genshin-blue);
   background: rgba(74, 141, 183, 0.04);
 }
+
 .dz-icon {
   font-size: 36px;
 }
+
 .dz-text {
   font-size: 14px;
   font-weight: 500;
   color: var(--genshin-blue-dark);
 }
+
 .dz-sub {
   font-size: 12px;
   color: #8a9aac;
 }
+
 .file-list-wrap {
   margin-top: 14px;
   padding: 14px;
   border-radius: 14px;
-  background: linear-gradient(
-    145deg,
-    rgba(74, 141, 183, 0.07),
-    rgba(163, 177, 198, 0.06)
-  );
+  background: linear-gradient(145deg,
+      rgba(74, 141, 183, 0.07),
+      rgba(163, 177, 198, 0.06));
   border: 1px solid rgba(74, 141, 183, 0.22);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
+
 .file-list-head {
   display: flex;
   align-items: baseline;
@@ -960,18 +930,21 @@ watch(
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(74, 141, 183, 0.15);
 }
+
 .file-list-title {
   font-size: 13px;
   font-weight: 700;
   color: var(--genshin-blue-dark);
   letter-spacing: 0.02em;
 }
+
 .file-list-count {
   font-size: 12px;
   font-weight: 600;
   color: var(--genshin-blue);
   white-space: nowrap;
 }
+
 .file-list {
   list-style: none;
   margin: 0;
@@ -980,6 +953,7 @@ watch(
   flex-direction: column;
   gap: 10px;
 }
+
 .file-row {
   display: flex;
   align-items: stretch;
@@ -991,14 +965,17 @@ watch(
   border: 1px solid rgba(255, 255, 255, 0.7);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
+
 .file-row:hover {
   box-shadow: 0 4px 14px rgba(74, 141, 183, 0.18);
 }
+
 .file-row-lead {
   flex-shrink: 0;
   display: flex;
   align-items: center;
 }
+
 .file-row-icon {
   display: flex;
   align-items: center;
@@ -1011,13 +988,12 @@ watch(
   font-weight: 800;
   letter-spacing: 0.06em;
   color: #fff;
-  background: linear-gradient(
-    135deg,
-    var(--genshin-blue, #4a8db7),
-    var(--genshin-blue-light, #6ba8c9)
-  );
+  background: linear-gradient(135deg,
+      var(--genshin-blue, #4a8db7),
+      var(--genshin-blue-light, #6ba8c9));
   box-shadow: 0 2px 8px rgba(74, 141, 183, 0.35);
 }
+
 .file-row-main {
   flex: 1;
   min-width: 0;
@@ -1027,6 +1003,7 @@ watch(
   justify-content: center;
   gap: 8px;
 }
+
 .fi-name {
   width: 100%;
   font-size: 13px;
@@ -1037,6 +1014,7 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .fi-size-badge {
   display: inline-flex;
   align-items: center;
@@ -1051,6 +1029,7 @@ watch(
   border: 1px solid rgba(74, 141, 183, 0.28);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
+
 .fi-del {
   flex-shrink: 0;
   align-self: center;
@@ -1071,19 +1050,23 @@ watch(
     background 0.15s,
     transform 0.12s;
 }
+
 .fi-del:hover {
   color: #c45c5c;
   background: rgba(196, 92, 92, 0.12);
 }
+
 .fi-del:active {
   transform: scale(0.94);
 }
+
 .fi-del-x {
   font-size: 22px;
   font-weight: 400;
   line-height: 1;
   margin-top: -2px;
 }
+
 .submit-btn {
   margin-top: 14px;
   padding: 11px 32px;
@@ -1092,15 +1075,14 @@ watch(
   cursor: pointer;
   font-size: 14px;
   font-family: "Noto Sans SC", sans-serif;
-  background: linear-gradient(
-    135deg,
-    var(--genshin-blue),
-    var(--genshin-blue-light)
-  );
+  background: linear-gradient(135deg,
+      var(--genshin-blue),
+      var(--genshin-blue-light));
   color: #fff;
   box-shadow: var(--neu-glow-blue-lift);
   transition: all 0.2s;
 }
+
 .submit-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1115,10 +1097,12 @@ watch(
   gap: 0;
   margin-bottom: 24px;
 }
+
 .flow-item {
   display: flex;
   align-items: center;
 }
+
 .flow-node {
   display: flex;
   flex-direction: column;
@@ -1129,13 +1113,16 @@ watch(
   min-width: 120px;
   transition: all 0.3s;
 }
+
 .flow-node.active {
   background: rgba(74, 141, 183, 0.07);
   box-shadow: var(--neu-extrude-lg);
 }
+
 .flow-node.done {
   background: rgba(92, 173, 138, 0.05);
 }
+
 .flow-circle {
   width: 42px;
   height: 42px;
@@ -1151,6 +1138,7 @@ watch(
   box-shadow: var(--neu-extrude-md);
   transition: all 0.35s;
 }
+
 .flow-node.done .flow-circle {
   border-color: #5cad8a;
   color: #5cad8a;
@@ -1158,12 +1146,14 @@ watch(
     0 0 10px rgba(92, 173, 138, 0.3),
     var(--neu-extrude-md);
 }
+
 .flow-node.active .flow-circle {
   border-color: var(--genshin-blue);
   box-shadow:
     0 0 12px rgba(74, 141, 183, 0.35),
     var(--neu-extrude-md);
 }
+
 .spin-dot {
   width: 16px;
   height: 16px;
@@ -1173,30 +1163,36 @@ watch(
   animation: spin 0.8s linear infinite;
   display: inline-block;
 }
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
+
 .flow-info {
   text-align: center;
 }
+
 .flow-title {
   font-size: 12px;
   font-weight: 600;
   color: var(--genshin-blue-dark);
   margin-bottom: 3px;
 }
+
 .flow-desc {
   font-size: 10px;
   color: #8a9aac;
   line-height: 1.4;
 }
+
 .flow-arrow {
   color: #b0bac8;
   padding: 0 4px;
   transition: color 0.3s;
 }
+
 .flow-arrow.lit {
   color: #5cad8a;
 }
@@ -1207,11 +1203,13 @@ watch(
   gap: 10px;
   margin-bottom: 16px;
 }
+
 .prog-label {
   font-size: 12px;
   color: #8a9aac;
   white-space: nowrap;
 }
+
 .prog-track {
   flex: 1;
   height: 8px;
@@ -1220,12 +1218,14 @@ watch(
   overflow: hidden;
   box-shadow: var(--neu-inset-track-lg);
 }
+
 .prog-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--genshin-blue), var(--genshin-gold));
   border-radius: 4px;
   transition: width 0.3s ease;
 }
+
 .prog-pct {
   font-size: 12px;
   font-weight: 600;
@@ -1244,26 +1244,32 @@ watch(
   border: 1px solid rgba(92, 173, 138, 0.25);
   flex-wrap: wrap;
 }
+
 .done-emoji {
   font-size: 28px;
 }
+
 .done-info {
   flex: 1;
 }
+
 .done-title {
   font-size: 15px;
   font-weight: 700;
   color: var(--genshin-blue-dark);
   margin-bottom: 4px;
 }
+
 .done-sub {
   font-size: 12px;
   color: #8a9aac;
 }
+
 .done-sub strong {
   color: var(--genshin-blue-dark);
   font-weight: 700;
 }
+
 .start-btn {
   padding: 11px 26px;
   border-radius: 12px;
@@ -1273,11 +1279,9 @@ watch(
   font-weight: 600;
   font-family: "Noto Sans SC", sans-serif;
   letter-spacing: 0.03em;
-  background: linear-gradient(
-    135deg,
-    var(--genshin-blue),
-    var(--genshin-blue-light)
-  );
+  background: linear-gradient(135deg,
+      var(--genshin-blue),
+      var(--genshin-blue-light));
   color: #fff;
   box-shadow: var(--neu-glow-blue-lift);
   white-space: nowrap;
@@ -1286,11 +1290,13 @@ watch(
     box-shadow 0.15s ease,
     filter 0.15s ease;
 }
+
 .start-btn:hover {
   box-shadow: var(--neu-glow-blue-hover-strong);
   filter: brightness(1.04);
   transform: translateY(-1px);
 }
+
 .start-btn:active {
   transform: translateY(0);
   filter: brightness(0.98);
@@ -1300,19 +1306,23 @@ watch(
 .slide-down-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .slide-down-enter-from,
 .slide-down-leave-to {
   opacity: 0;
   transform: translateY(-10px);
 }
+
 .done-pop-enter-active {
   animation: pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
 @keyframes pop {
   from {
     transform: scale(0.88);
     opacity: 0;
   }
+
   to {
     transform: scale(1);
     opacity: 1;
@@ -1325,48 +1335,57 @@ watch(
   color: #8a9aac;
   margin-bottom: 12px;
 }
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
+
 .summary-item {
   padding: 12px;
 }
+
 .si-label {
   font-size: 11px;
   color: #8a9aac;
   margin-bottom: 6px;
 }
+
 .si-value {
   font-size: 20px;
   font-weight: 700;
   color: var(--genshin-blue-dark);
 }
+
 .sub-block-title {
   margin: 6px 0 10px;
   font-size: 13px;
   font-weight: 600;
   color: var(--genshin-blue-dark);
 }
+
 .mini-bars {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-bottom: 14px;
 }
+
 .mini-bar-row {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+
 .mbr-label {
   width: 88px;
   font-size: 12px;
   color: #5a6a7c;
   flex-shrink: 0;
 }
+
 .mbr-track {
   flex: 1;
   height: 8px;
@@ -1375,14 +1394,14 @@ watch(
   background: var(--bg-groove);
   box-shadow: var(--neu-inset-track-sm);
 }
+
 .mbr-fill {
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--genshin-blue),
-    var(--genshin-blue-light)
-  );
+  background: linear-gradient(90deg,
+      var(--genshin-blue),
+      var(--genshin-blue-light));
 }
+
 .mbr-val {
   width: 40px;
   text-align: right;
@@ -1390,9 +1409,11 @@ watch(
   color: #5a6a7c;
   flex-shrink: 0;
 }
+
 .table-wrap {
   overflow-x: auto;
 }
+
 .mock-table {
   width: 100%;
   border-collapse: separate;
@@ -1400,17 +1421,20 @@ watch(
   font-size: 12px;
   min-width: 780px;
 }
+
 .mock-table th,
 .mock-table td {
   padding: 9px 10px;
   border-bottom: 1px solid var(--neu-stroke-faint);
   text-align: left;
 }
+
 .mock-table th {
   background: rgba(74, 141, 183, 0.08);
   color: var(--genshin-blue-dark);
   font-weight: 600;
 }
+
 .mock-table tbody tr:hover td {
   background: rgba(74, 141, 183, 0.03);
 }

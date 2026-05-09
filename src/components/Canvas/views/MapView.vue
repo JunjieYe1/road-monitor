@@ -205,6 +205,7 @@ import {
   SEV_COLORS,
   statusLabel,
 } from '../../../utils/labels'
+import { diseaseLevelToSeverity } from '../../../utils/severity'
 import SeverityBadge from '../../common/SeverityBadge.vue'
 
 interface OverlayMapRow {
@@ -259,13 +260,6 @@ const filteredAlerts = computed(() =>
     ? alertStore.alerts
     : alertStore.alerts.filter(a => a.type === activeFilter.value)
 )
-
-function diseaseLevelToSeverity(level: string): 'high' | 'medium' | 'low' {
-  const s = level.trim()
-  if (/Ⅲ|III|^3$/i.test(s)) return 'high'
-  if (/Ⅱ|II|^2$/i.test(s)) return 'medium'
-  return 'low'
-}
 
 const overlayRows = computed<OverlayMapRow[]>(() =>
   mapOverlayStore.points.map((p, i) => ({

@@ -17,80 +17,35 @@
       <!-- 搜索框 -->
       <div class="search-block">
         <div class="search-wrap" :class="{ focused: isFocused }">
-          <svg
-            class="search-icon"
-            viewBox="0 0 20 20"
-            fill="none"
-            width="18"
-            height="18"
-          >
-            <circle
-              cx="9"
-              cy="9"
-              r="6"
-              stroke="currentColor"
-              stroke-width="1.6"
-            />
-            <path
-              d="M13.5 13.5L17 17"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-            />
+          <svg class="search-icon" viewBox="0 0 20 20" fill="none" width="18" height="18">
+            <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.6" />
+            <path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
           </svg>
-          <input
-            ref="inputEl"
-            v-model="query"
-            class="search-input"
-            placeholder="你想了解什么？输入问题或指令..."
-            @focus="isFocused = true"
-            @blur="isFocused = false"
-            @keydown.enter="handleSearch"
-          />
-          <button
-            class="search-submit"
-            :disabled="!query.trim()"
-            @click="handleSearch"
-          >
+          <input ref="inputEl" v-model="query" class="search-input" placeholder="你想了解什么？输入问题或指令..."
+            @focus="isFocused = true" @blur="isFocused = false" @keydown.enter="handleSearch" />
+          <button class="search-submit" :disabled="!query.trim()" @click="handleSearch">
             <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
-              <path
-                d="M4 10h12M10 4l6 6-6 6"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
+              <path d="M4 10h12M10 4l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round" />
             </svg>
           </button>
         </div>
 
         <!-- 示例问题 -->
         <div class="example-queries">
-          <span
-            v-for="ex in examples"
-            :key="ex"
-            class="example-chip"
-            @click="
-              query = ex;
-              handleSearch();
-            "
-            >{{ ex }}</span
-          >
+          <span v-for="ex in examples" :key="ex" class="example-chip" @click="
+            query = ex;
+          handleSearch();
+          ">{{ ex }}</span>
         </div>
       </div>
 
       <!-- 快速功能入口 -->
       <div class="quick-entries">
-        <div
-          v-for="entry in entries"
-          :key="entry.key"
-          class="entry-card"
-          :class="[
-            entry.highlight ? 'highlight' : '',
-            entry.disabled ? 'disabled' : '',
-          ]"
-          @click="handleEntry(entry)"
-        >
+        <div v-for="entry in entries" :key="entry.key" class="entry-card" :class="[
+          entry.highlight ? 'highlight' : '',
+          entry.disabled ? 'disabled' : '',
+        ]" @click="handleEntry(entry)">
           <div class="entry-icon">{{ entry.icon }}</div>
           <div class="entry-info">
             <div class="entry-label">{{ entry.label }}</div>
@@ -106,11 +61,9 @@
         <span class="footer-status">实时监测中</span>
         <span class="footer-time">{{ currentTime }}</span>
         <span class="footer-divider">|</span>
-        <span class="footer-stat">今日告警 <strong>12</strong> 处</span>
+        <span class="footer-stat">告警数: <strong>12</strong> 处</span>
         <span class="footer-divider">|</span>
-        <span class="footer-stat"
-          >高危 <strong class="danger">5</strong> 处</span
-        >
+        <span class="footer-stat">高危 <strong class="danger">5</strong> 处</span>
       </div>
     </div>
   </div>
@@ -136,8 +89,8 @@ const canvasEl = ref<HTMLCanvasElement | null>(null);
 const currentTime = ref("");
 
 const examples = [
-  "今日高危告警路段有哪些？",
-  "生成2024年度巡检报告",
+  "高危告警路段有哪些？",
+  "生成2025年度巡检报告",
   "查看服务单位履约画像",
   "分析南山路风险",
 ];
@@ -373,6 +326,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 12px;
 }
+
 .title-tag {
   font-size: 12px;
   letter-spacing: 4px;
@@ -380,6 +334,7 @@ onUnmounted(() => {
   font-weight: 500;
   opacity: 0.8;
 }
+
 .home-main-title {
   font-family: "Noto Serif SC", serif;
   font-size: 36px;
@@ -389,6 +344,7 @@ onUnmounted(() => {
   letter-spacing: 3px;
   text-shadow: 2px 4px 12px rgba(163, 177, 198, 0.6);
 }
+
 .home-subtitle {
   font-size: 14px;
   color: #8a9aac;
@@ -403,6 +359,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 14px;
 }
+
 .search-wrap {
   width: 100%;
   display: flex;
@@ -415,20 +372,24 @@ onUnmounted(() => {
   box-shadow: var(--neu-extrude-xl);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .search-wrap.focused {
   border-color: rgba(74, 141, 183, 0.4);
   box-shadow:
     var(--neu-extrude-xxl),
     0 0 0 4px rgba(74, 141, 183, 0.08);
 }
+
 .search-icon {
   color: #8a9aac;
   flex-shrink: 0;
   transition: color 0.2s;
 }
+
 .search-wrap.focused .search-icon {
   color: var(--genshin-blue);
 }
+
 .search-input {
   flex: 1;
   border: none;
@@ -438,9 +399,11 @@ onUnmounted(() => {
   font-family: "Noto Sans SC", sans-serif;
   color: var(--genshin-blue-dark);
 }
+
 .search-input::placeholder {
   color: #b0bac8;
 }
+
 .search-submit {
   width: 36px;
   height: 36px;
@@ -448,11 +411,9 @@ onUnmounted(() => {
   border: none;
   cursor: pointer;
   flex-shrink: 0;
-  background: linear-gradient(
-    135deg,
-    var(--genshin-blue),
-    var(--genshin-blue-light)
-  );
+  background: linear-gradient(135deg,
+      var(--genshin-blue),
+      var(--genshin-blue-light));
   color: #fff;
   display: flex;
   align-items: center;
@@ -460,10 +421,12 @@ onUnmounted(() => {
   box-shadow: var(--neu-glow-blue-strong);
   transition: all 0.2s;
 }
+
 .search-submit:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
 .search-submit:not(:disabled):hover {
   box-shadow: var(--neu-glow-blue-hover-strong);
   transform: translateY(-1px);
@@ -475,6 +438,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   justify-content: center;
 }
+
 .example-chip {
   padding: 5px 14px;
   border-radius: 20px;
@@ -486,6 +450,7 @@ onUnmounted(() => {
   transition: all 0.2s;
   white-space: nowrap;
 }
+
 .example-chip:hover {
   color: var(--genshin-blue);
   box-shadow: var(--neu-extrude-lg);
@@ -512,6 +477,7 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
 }
+
 .entry-card::before {
   content: "";
   position: absolute;
@@ -520,58 +486,69 @@ onUnmounted(() => {
   opacity: 0;
   transition: opacity 0.2s;
 }
+
 .entry-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--neu-extrude-xl);
 }
+
 .entry-card:hover::before {
   opacity: 1;
 }
+
 .entry-card.highlight {
   border: 1px solid rgba(212, 168, 83, 0.3);
-  background: linear-gradient(
-    135deg,
-    var(--bg-color),
-    rgba(212, 168, 83, 0.04)
-  );
+  background: linear-gradient(135deg,
+      var(--bg-color),
+      rgba(212, 168, 83, 0.04));
 }
+
 .entry-card.disabled {
   cursor: not-allowed;
   opacity: 0.72;
   box-shadow: var(--neu-extrude-md);
 }
+
 .entry-card.disabled::before {
   display: none;
 }
+
 .entry-card.disabled:hover {
   transform: none;
   box-shadow: var(--neu-extrude-md);
 }
+
 .entry-card.disabled .entry-icon {
   filter: grayscale(1);
   opacity: 0.55;
 }
+
 .entry-card.disabled .entry-label,
 .entry-card.disabled .entry-desc {
   color: #9aa5b2;
 }
+
 .entry-card.disabled .entry-badge {
   opacity: 0.6;
 }
+
 .entry-icon {
   font-size: 22px;
   flex-shrink: 0;
 }
+
 .entry-info {
   flex: 1;
   min-width: 0;
 }
+
 .entry-label {
   font-size: 13px;
   font-weight: 600;
   color: var(--genshin-blue-dark);
   margin-bottom: 2px;
 }
+
 .entry-desc {
   font-size: 10px;
   color: #8a9aac;
@@ -579,6 +556,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .entry-badge {
   font-size: 9px;
   padding: 2px 6px;
@@ -598,6 +576,7 @@ onUnmounted(() => {
   font-size: 12px;
   color: #8a9aac;
 }
+
 .status-dot-sm {
   width: 6px;
   height: 6px;
@@ -606,20 +585,25 @@ onUnmounted(() => {
   display: inline-block;
   box-shadow: 0 0 4px var(--success);
 }
+
 .footer-status {
   color: var(--success);
   font-weight: 500;
 }
+
 .footer-time {
   color: var(--genshin-blue);
   font-variant-numeric: tabular-nums;
 }
+
 .footer-divider {
   opacity: 0.3;
 }
+
 .footer-stat strong {
   color: var(--genshin-blue-dark);
 }
+
 .footer-stat strong.danger {
   color: #e07070;
 }
@@ -628,6 +612,7 @@ onUnmounted(() => {
   .quick-entries {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .home-main-title {
     font-size: 26px;
   }

@@ -71,17 +71,25 @@
     <!-- 三栏主体 -->
     <main
       class="main-content"
-      :class="{ 'chat-wide': chatWide, 'collect-mode': isCollectMode }"
+      :class="{
+        'chat-wide': chatWide && !hideRightChatOnReport,
+        'collect-mode': isCollectMode,
+        'rightchat-hidden': hideRightChatOnReport,
+      }"
     >
       <LeftPanel v-if="!isCollectMode" class="left-panel" />
       <Canvas class="center-panel" />
-      <RightChat v-model:wide="chatWide" class="right-panel" />
+      <RightChat
+        v-if="!isCollectMode && !hideRightChatOnReport"
+        v-model:wide="chatWide"
+        class="right-panel"
+      />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted, onMounted } from "vue";
+import { ref, computed, watch, onUnmounted, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LeftPanel from "../components/LeftPanel/index.vue";
 import Canvas from "../components/Canvas/index.vue";
@@ -102,6 +110,9 @@ const alertStore = useAlertStore();
 /** 对话栏加宽：隐藏左侧栏，对话区约占半屏 */
 const chatWide = ref(false);
 const isCollectMode = computed(() => canvasStore.agentMode === "collect");
+const hideRightChatOnReport = computed(
+  () => canvasStore.getActiveTab()?.type === "report",
+);
 
 const currentTime = ref("");
 function updateTime() {
@@ -125,10 +136,23 @@ async function onLogout() {
   router.push({ name: "login", query: { redirect: "/workspace" } });
 }
 
+watch(
+  () => canvasStore.activeTabId,
+  (nextId, prevId) => {
+    if (!prevId || nextId === prevId) return;
+    alertStore.restoreAlertsAfterMapControl();
+    chatStore.startNewChat(false);
+  },
+);
+
 onMounted(async () => {
-  await alertStore.loadRecheckAlerts();
+  if (!alertStore.hasLoadedBaseAlerts || alertStore.alerts.length === 0) {
+    await alertStore.loadRecheckAlerts();
+  }
+  alertStore.restoreAlertsAfterMapControl();
   const q = typeof route.query.q === "string" ? route.query.q.trim() : "";
   await chatStore.initWorkspace();
+  chatStore.startNewChat(false);
   if (q) {
     await chatStore.sendMessage(q);
     await router.replace({ path: "/workspace", query: {} });
@@ -357,6 +381,10 @@ onMounted(async () => {
   flex-shrink: 0;
   overflow: visible;
   transition: width 0.22s ease;
+}
+
+.main-content.rightchat-hidden .center-panel {
+  flex: 1;
 }
 
 .main-content.chat-wide .left-panel {

@@ -31,3 +31,4 @@ dist-ssr
 # Python
 __pycache__/
 *.py[cod]
+*.rar
