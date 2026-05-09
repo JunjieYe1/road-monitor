@@ -156,109 +156,10 @@
       </button>
     </div>
 
-    <!-- 虚拟形象区 -->
+    <!-- 虚拟形象区：多智能体转盘 -->
     <div class="avatar-section">
-      <div class="avatar-frame breathe">
-        <svg
-          viewBox="0 0 100 100"
-          class="avatar-svg"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <defs>
-            <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#4A8DB7" stop-opacity="0.3" />
-              <stop offset="100%" stop-color="#1A3A52" stop-opacity="0" />
-            </radialGradient>
-            <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="#5A8FD0" />
-              <stop offset="100%" stop-color="#2D5A7B" />
-            </linearGradient>
-            <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#F0D78C" />
-              <stop offset="100%" stop-color="#B8923F" />
-            </linearGradient>
-          </defs>
-          <circle cx="50" cy="50" r="46" fill="url(#bgGrad)" />
-          <ellipse
-            cx="50"
-            cy="75"
-            rx="26"
-            ry="16"
-            fill="url(#bodyGrad)"
-            opacity="0.8"
-          />
-          <circle cx="50" cy="42" r="20" fill="url(#bodyGrad)" />
-          <path
-            d="M32,36 Q35,20 50,22 Q65,20 68,36 Q60,28 50,30 Q40,28 32,36Z"
-            fill="#1A3A52"
-          />
-          <ellipse cx="43" cy="42" rx="4" ry="4.5" fill="white" />
-          <ellipse cx="57" cy="42" rx="4" ry="4.5" fill="white" />
-          <circle cx="44" cy="43" r="2.5" fill="#1A3A52" />
-          <circle cx="58" cy="43" r="2.5" fill="#1A3A52" />
-          <circle cx="45" cy="42" r="1" fill="white" />
-          <circle cx="59" cy="42" r="1" fill="white" />
-          <path
-            d="M45,51 Q50,55 55,51"
-            stroke="#4A8DB7"
-            stroke-width="1.5"
-            fill="none"
-            stroke-linecap="round"
-          />
-          <path d="M44,30 L50,25 L56,30" fill="url(#goldGrad)" opacity="0.9" />
-          <circle cx="50" cy="24" r="3" fill="url(#goldGrad)" />
-        </svg>
-      </div>
-      <div class="avatar-info">
-        <div class="avatar-name">路小巡</div>
-        <div class="avatar-title">道路智能监测助手</div>
-      </div>
-      <!-- 右侧纵列：知识库 + 在线状态 -->
-      <div class="avatar-right-col">
-        <div class="kb-chips">
-          <button
-            type="button"
-            class="kb-manage-btn"
-            @click="goKb"
-            title="知识库管理（多选）"
-          >
-            <span class="kb-mb-icon">📚</span>
-            <span class="kb-mb-text">知识库</span>
-          </button>
-          <span
-            v-for="k in chatStore.activeKbSelections"
-            :key="k.id"
-            class="kb-chip"
-          >
-            <span class="kb-chip-label">{{ k.label }}</span>
-            <button
-              type="button"
-              class="kb-chip-x"
-              @click.stop="chatStore.removeKb(k.id)"
-            >
-              ✕
-            </button>
-          </span>
-          <button
-            v-if="chatStore.activeKbSelections.length"
-            type="button"
-            class="kb-clear-all"
-            @click="chatStore.clearKbs()"
-          >
-            清空
-          </button>
-        </div>
-        <div
-          class="online-badge"
-          :class="{ 'is-answering': chatStore.isLoading }"
-        >
-          <span
-            class="status-dot"
-            :class="chatStore.isLoading ? 'status-dot-typing' : 'breathe'"
-          ></span>
-          <span>{{ chatStore.isLoading ? "正在回答…" : "在线" }}</span>
-        </div>
-      </div>
+      <div class="genshin-subtitle avatar-expert-title">智能专家组</div>
+      <AgentPersonaCarousel class="avatar-carousel-block" />
     </div>
 
     <!-- 对话区：消息多，始终可纵向滚动 -->
@@ -271,17 +172,10 @@
         :data-message-id="msg.id"
       >
         <div v-if="msg.role === 'assistant'" class="msg-avatar">
-          <svg
-            viewBox="0 0 40 40"
-            class="mini-avatar"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <circle cx="20" cy="20" r="18" fill="#2D5A7B" />
-            <circle cx="20" cy="17" r="8" fill="#4A8DB7" />
-            <path d="M15,15 Q20,11 25,15" fill="#1A3A52" />
-            <circle cx="17" cy="17" r="2" fill="white" />
-            <circle cx="23" cy="17" r="2" fill="white" />
-          </svg>
+          <ChatAgentIcon
+            :kind="chatStore.activeChatAgent.iconKind"
+            variant="mini"
+          />
         </div>
 
         <div class="bubble-wrap" :class="msg.role">
@@ -436,7 +330,9 @@
           <span class="srh-dot"></span>
           <span class="srh-dot"></span>
         </span>
-        <span class="stream-reply-hint-text">路小巡正在生成回复，请稍候…</span>
+        <span class="stream-reply-hint-text">{{
+          chatStore.activeChatAgent.streamingHint
+        }}</span>
       </div>
     </div>
 
@@ -445,7 +341,7 @@
       <div class="quick-label">快捷指令</div>
       <div class="quick-btns">
         <button
-          v-for="q in modeQuickQuestions"
+          v-for="q in agentQuickQuestions"
           :key="q"
           class="quick-btn"
           :disabled="chatStore.isLoading"
@@ -590,7 +486,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
 import { useChatStore } from "../../stores/chatStore";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -600,6 +495,8 @@ import {
   type CanvasViewType,
 } from "../../stores/canvasStore";
 import SeverityBadge from "../common/SeverityBadge.vue";
+import AgentPersonaCarousel from "./AgentPersonaCarousel.vue";
+import ChatAgentIcon from "./ChatAgentIcon.vue";
 import { renderChatMarkdown } from "../../utils/renderMarkdown";
 import { useUiStore } from "../../stores/uiStore";
 import {
@@ -611,7 +508,6 @@ import { formatLocaleSessionSub } from "../../utils/localeFormat";
 
 const wide = defineModel<boolean>("wide", { default: false });
 
-const router = useRouter();
 const chatStore = useChatStore();
 const canvasStore = useCanvasStore();
 const auth = useAuthStore();
@@ -623,10 +519,6 @@ const viewportChartSyncKey = computed(() =>
     .map((e) => `${e.messageId}:${e.ordinalInMessage}:${e.globalIndex}`)
     .join("|"),
 );
-
-function goKb() {
-  router.push("/pdf");
-}
 
 const sessionSelect = ref("");
 const sessionDdOpen = ref(false);
@@ -882,27 +774,8 @@ const mentionItems = computed(() =>
   mentionItemsSource.filter((i) => !isViewOpenDisabled(i.type)),
 );
 
-// 按模式切换快捷指令
-const modeQuickMap: Record<string, string[]> = {
-  insight: [
-    "今日高优先级告警有哪些？",
-    "上城区道路情况如何？",
-    "生成本周维修建议报告",
-  ],
-  collect: [
-    "当前知识库包含哪些内容？",
-    "提取失败的报告有哪些？",
-    "知识库最新更新时间？",
-  ],
-  operations: [
-    "显示所有待处理工单",
-    "生成下月巡检计划",
-    "哪些工单超期未处理？",
-  ],
-  predict: ["未来3个月高风险路段", "分析解放路塌陷风险", "生成风险预测报告"],
-};
-const modeQuickQuestions = computed(
-  () => modeQuickMap[canvasStore.agentMode] || modeQuickMap["insight"],
+const agentQuickQuestions = computed(
+  () => chatStore.activeChatAgent.quickQuestions,
 );
 
 const inputPlaceholder = computed(() => {
@@ -912,7 +785,7 @@ const inputPlaceholder = computed(() => {
   if (chatStore.attachedWorkorder) return "输入关于该工单的问题…";
   if (selectedMentions.value.length)
     return `结合 @${selectedMentions.value.map((m) => m.label).join("、")} 提问…`;
-  return "向路小巡提问，输入 @ 引用功能视图…";
+  return chatStore.activeChatAgent.placeholderHint;
 });
 
 const canSend = computed(
@@ -1242,9 +1115,11 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 }
 
 .avatar-section {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   padding: 10px 12px;
   background: linear-gradient(
     135deg,
@@ -1254,167 +1129,14 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   border-radius: 14px;
   box-shadow: var(--neu-inset-shallow);
   flex-shrink: 0;
-  flex-wrap: wrap;
 }
-.avatar-frame {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  padding: 3px;
-  background: linear-gradient(
-    135deg,
-    var(--genshin-gold-dark),
-    var(--genshin-gold),
-    var(--genshin-gold-light)
-  );
-  flex-shrink: 0;
-  box-shadow: var(--neu-glow-gold-frame);
+.avatar-expert-title {
+  align-self: flex-start;
+  font-size: 14px;
 }
-.avatar-svg {
+.avatar-carousel-block {
   width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: var(--bg-color);
-}
-.mini-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-}
-.avatar-info {
-  flex: 1;
-}
-.avatar-name {
-  font-family: "Noto Serif SC", serif;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--genshin-blue-dark);
-  letter-spacing: 1px;
-}
-.avatar-title {
-  font-size: 11px;
-  color: #8a9aac;
-  margin-top: 2px;
-}
-.online-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--success);
-  flex-shrink: 0;
-  transition: color 0.2s;
-}
-.online-badge.is-answering {
-  color: var(--genshin-blue);
-  font-weight: 600;
-}
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--success);
-  display: inline-block;
-  box-shadow: 0 0 5px var(--success);
-}
-.status-dot-typing {
-  background: var(--genshin-blue);
-  box-shadow: 0 0 6px rgba(74, 141, 183, 0.65);
-  animation: status-dot-blink 1s ease-in-out infinite;
-}
-@keyframes status-dot-blink {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.55;
-    transform: scale(0.92);
-  }
-}
-
-/* 右侧纵列：知识库 + 在线 */
-.avatar-right-col {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 5px;
-  flex-shrink: 0;
   max-width: 100%;
-}
-
-.kb-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  max-width: 220px;
-}
-.kb-manage-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
-  border-radius: 9px;
-  border: 1px solid var(--neu-stroke-muted);
-  background: var(--bg-color);
-  cursor: pointer;
-  font-size: 11px;
-  font-family: "Noto Sans SC", sans-serif;
-  color: #3a4a5c;
-  box-shadow: var(--neu-extrude-sm);
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-.kb-manage-btn:hover {
-  color: var(--genshin-blue);
-  border-color: rgba(74, 141, 183, 0.3);
-}
-.kb-mb-icon {
-  font-size: 12px;
-  flex-shrink: 0;
-}
-.kb-mb-text {
-  font-weight: 600;
-}
-.kb-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  max-width: 100px;
-  padding: 2px 6px;
-  border-radius: 8px;
-  font-size: 10px;
-  font-weight: 600;
-  background: rgba(212, 168, 83, 0.12);
-  border: 1px solid rgba(212, 168, 83, 0.35);
-  color: var(--genshin-gold-dark);
-}
-.kb-chip-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kb-chip-x {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #b0bac8;
-  font-size: 9px;
-  padding: 0 1px;
-  flex-shrink: 0;
-}
-.kb-clear-all {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  background: rgba(224, 112, 112, 0.12);
-  color: #e07070;
-  font-family: "Noto Sans SC", sans-serif;
 }
 
 /* 对话区 */

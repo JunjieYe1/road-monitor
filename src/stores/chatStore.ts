@@ -15,6 +15,11 @@ import {
   apiMessageDislike,
   type ConversationListItem,
 } from "../api/agentClient";
+import {
+  CHAT_AGENTS,
+  DEFAULT_CHAT_AGENT_ID,
+  getChatAgentById,
+} from "../config/chatAgents";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 
@@ -61,18 +66,6 @@ function threadPartFromKey(key: string): string {
   return i >= 0 ? key.slice(i + 1) : key;
 }
 
-function welcomeMessages(): ChatMessage[] {
-  return [
-    {
-      id: 1,
-      role: "assistant",
-      content:
-        "您好！我是路小巡，城市道路智能监测助手。我可以帮您分析道路病害数据、查询告警详情、生成报告、查看履约画像等。请问有什么需要帮助的？",
-      time: formatLocaleTimeHm(),
-    },
-  ];
-}
-
 function mapApiMessage(m: Record<string, unknown>, idNum: number): ChatMessage {
   const msg = m.message as { role?: string; content?: string } | undefined;
   const role: "user" | "assistant" =
@@ -102,6 +95,29 @@ function applyUiContextFromHint(hint: UiContextHint | null) {
 export const useChatStore = defineStore("chat", () => {
   const alertStore = useAlertStore();
   let mapControlEventSeq = 0;
+  const activeChatAgentId = ref(DEFAULT_CHAT_AGENT_ID);
+
+  function welcomeMessages(): ChatMessage[] {
+    const agent =
+      getChatAgentById(activeChatAgentId.value) ?? CHAT_AGENTS[0]!;
+    return [
+      {
+        id: 1,
+        role: "assistant",
+        content: agent.welcome,
+        time: formatLocaleTimeHm(),
+      },
+    ];
+  }
+
+  function setActiveChatAgent(id: string) {
+    if (getChatAgentById(id)) activeChatAgentId.value = id;
+  }
+
+  const activeChatAgent = computed(
+    () => getChatAgentById(activeChatAgentId.value) ?? CHAT_AGENTS[0]!,
+  );
+
   const messages = ref<ChatMessage[]>(welcomeMessages());
   let nextId = 2;
   const isLoading = ref(false);
@@ -114,13 +130,6 @@ export const useChatStore = defineStore("chat", () => {
   const activeConversationKey = ref<string | null>(null);
   const activeThreadShort = ref(`user_session_${Date.now()}`);
   const workspaceReady = ref(false);
-
-  const quickQuestions = [
-    "今日高优先级告警有哪些？",
-    "上城区道路情况如何？",
-    "生成本周维修建议报告",
-    "哪类病害最需要紧急处理？",
-  ];
 
   const activeKbRange = computed(() =>
     activeKbSelections.value.length
@@ -657,7 +666,9 @@ export const useChatStore = defineStore("chat", () => {
   return {
     messages,
     isLoading,
-    quickQuestions,
+    activeChatAgentId,
+    activeChatAgent,
+    setActiveChatAgent,
     attachedAlert,
     attachedWorkorder,
     attachAlert,
