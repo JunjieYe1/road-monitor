@@ -123,6 +123,8 @@ export const useChatStore = defineStore("chat", () => {
   const isLoading = ref(false);
 
   const attachedAlert = ref<AlertPoint | null>(null);
+  /** 病害生命周期页会话内持续附带，离开路由由页面清除 */
+  const lifecyclePinnedAlert = ref<AlertPoint | null>(null);
   const attachedWorkorder = ref<WorkorderContext | null>(null);
   const activeKbSelections = ref<KbSelection[]>([]);
 
@@ -148,6 +150,13 @@ export const useChatStore = defineStore("chat", () => {
   }
   function clearAttachedWorkorder() {
     attachedWorkorder.value = null;
+  }
+
+  function pinDefectForLifecycle(alert: AlertPoint) {
+    lifecyclePinnedAlert.value = { ...alert };
+  }
+  function clearLifecyclePin() {
+    lifecyclePinnedAlert.value = null;
   }
 
   function toggleKb(entry: KbSelection) {
@@ -321,7 +330,9 @@ export const useChatStore = defineStore("chat", () => {
     alertStore.restoreAlertsAfterMapControl();
     useMapOverlayStore().clear();
 
-    const ctx = attachedAlert.value;
+    const ephemeralCtx = attachedAlert.value;
+    const pinnedCtx = lifecyclePinnedAlert.value;
+    const ctx = ephemeralCtx ?? pinnedCtx ?? null;
     const workCtx = attachedWorkorder.value;
     attachedAlert.value = null;
     attachedWorkorder.value = null;
@@ -342,7 +353,8 @@ export const useChatStore = defineStore("chat", () => {
         `病害类型：${ctx.type} | 危险等级：${sevLabel(ctx.severity)} | 处理状态：${statusLabel(ctx.status)}\n` +
         `所属区县：${ctx.district} | 上报时间：${ctx.time}\n` +
         `GPS坐标：${ctx.lat}, ${ctx.lng}` +
-        (ctx.description ? `\n详细描述：${ctx.description}` : "");
+        (ctx.description ? `\n详细描述：${ctx.description}` : "") +
+        (pinnedCtx && !ephemeralCtx ? `\n【会话来源：病害生命周期视图】` : "");
     }
     if (workCtx) {
       aiContent +=
@@ -675,6 +687,9 @@ export const useChatStore = defineStore("chat", () => {
     attachWorkorder,
     clearAttachedAlert,
     clearAttachedWorkorder,
+    lifecyclePinnedAlert,
+    pinDefectForLifecycle,
+    clearLifecyclePin,
     activeKbSelections,
     activeKbRange,
     toggleKb,

@@ -77,8 +77,12 @@
         'rightchat-hidden': hideRightChatOnReport,
       }"
     >
-      <LeftPanel v-if="!isCollectMode" class="left-panel" />
-      <Canvas class="center-panel" />
+      <LeftPanel v-if="!isCollectMode && !isDefectLifecycleRoute" class="left-panel" />
+      <DefectLifecyclePanel
+        v-if="isDefectLifecycleRoute"
+        class="center-panel lifecycle-center"
+      />
+      <Canvas v-if="!isDefectLifecycleRoute" class="center-panel" />
       <RightChat
         v-if="!isCollectMode && !hideRightChatOnReport"
         v-model:wide="chatWide"
@@ -93,6 +97,7 @@ import { ref, computed, watch, onUnmounted, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LeftPanel from "../components/LeftPanel/index.vue";
 import Canvas from "../components/Canvas/index.vue";
+import DefectLifecyclePanel from "../components/Lifecycle/DefectLifecyclePanel.vue";
 import RightChat from "../components/RightChat/index.vue";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
@@ -106,6 +111,10 @@ const auth = useAuthStore();
 const chatStore = useChatStore();
 const canvasStore = useCanvasStore();
 const alertStore = useAlertStore();
+
+const isDefectLifecycleRoute = computed(
+  () => route.name === "workspace-defect",
+);
 
 /** 对话栏加宽：隐藏左侧栏，对话区约占半屏 */
 const chatWide = ref(false);
@@ -140,6 +149,7 @@ watch(
   () => canvasStore.activeTabId,
   (nextId, prevId) => {
     if (!prevId || nextId === prevId) return;
+    if (route.name === "workspace-defect") return;
     alertStore.restoreAlertsAfterMapControl();
     chatStore.startNewChat(false);
   },
@@ -228,7 +238,7 @@ onMounted(async () => {
   opacity: 0.8;
 }
 .main-title {
-  font-size: 18px;
+  font-size: 20px;
   letter-spacing: 4px;
   background: none !important;
   -webkit-background-clip: unset !important;
@@ -375,6 +385,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   overflow: visible;
+}
+.lifecycle-center {
+  min-width: 0;
 }
 .right-panel {
   width: 24%;

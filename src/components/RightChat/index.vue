@@ -356,20 +356,20 @@
     <div class="input-area">
       <!-- 点位上下文徽章 -->
       <transition name="badge-fade">
-        <div v-if="chatStore.attachedAlert" class="alert-badge-row">
+        <div v-if="inputContextAlert" class="alert-badge-row">
           <div class="alert-badge">
             <span class="badge-icon">📍</span>
             <SeverityBadge
-              :level="chatStore.attachedAlert.severity"
+              :level="inputContextAlert.severity"
               size="sm"
             />
-            <span class="badge-type">{{ chatStore.attachedAlert.type }}</span>
+            <span class="badge-type">{{ inputContextAlert.type }}</span>
             <span class="badge-addr">{{
-              chatStore.attachedAlert.address
+              inputContextAlert.address
             }}</span>
             <button
               class="badge-del"
-              @click="chatStore.clearAttachedAlert()"
+              @click="onClearPointBadge()"
               title="移除关联点位"
             >
               ✕
@@ -778,10 +778,21 @@ const agentQuickQuestions = computed(
   () => chatStore.activeChatAgent.quickQuestions,
 );
 
+const inputContextAlert = computed(
+  () => chatStore.attachedAlert ?? chatStore.lifecyclePinnedAlert,
+);
+
+function onClearPointBadge() {
+  if (chatStore.attachedAlert) chatStore.clearAttachedAlert();
+  else chatStore.clearLifecyclePin();
+}
+
 const inputPlaceholder = computed(() => {
-  if (chatStore.attachedAlert && chatStore.attachedWorkorder)
+  const pointCtx =
+    chatStore.attachedAlert ?? chatStore.lifecyclePinnedAlert;
+  if (pointCtx && chatStore.attachedWorkorder)
     return "输入问题，将同时结合点位与工单信息…";
-  if (chatStore.attachedAlert) return "输入关于该点位的问题…";
+  if (pointCtx) return "输入关于该点位的问题…";
   if (chatStore.attachedWorkorder) return "输入关于该工单的问题…";
   if (selectedMentions.value.length)
     return `结合 @${selectedMentions.value.map((m) => m.label).join("、")} 提问…`;
@@ -1119,8 +1130,8 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 0px;
+  padding: 10px 12px 0 12px;
   background: linear-gradient(
     135deg,
     rgba(45, 90, 123, 0.08),
@@ -1133,6 +1144,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 .avatar-expert-title {
   align-self: flex-start;
   font-size: 14px;
+
 }
 .avatar-carousel-block {
   width: 100%;

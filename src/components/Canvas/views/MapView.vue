@@ -100,6 +100,17 @@
           <div class="popup-desc overlay-coords">
             坐标 {{ selectedOverlay.lat.toFixed(6) }}, {{ selectedOverlay.lng.toFixed(6) }}
           </div>
+          <div class="popup-actions">
+            <button
+              class="popup-btn flow-btn"
+              @click="goOverlayLifecycle(selectedOverlay)"
+            >
+              <svg viewBox="0 0 20 20" fill="none" width="12" height="12" style="flex-shrink:0">
+                <path d="M4 10h12M10 4l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              查看生命周期
+            </button>
+          </div>
         </div>
       </transition>
 
@@ -122,25 +133,13 @@
           </div>
           <div class="popup-actions">
             <button
-              class="popup-btn"
-              :class="{ active: chatStore.attachedAlert?.id === alertStore.selectedAlert.id }"
-              @click="addToChat(alertStore.selectedAlert)"
-            >
-              <svg viewBox="0 0 20 20" fill="none" width="12" height="12" style="flex-shrink:0">
-                <path d="M2 10C2 5.58 5.58 2 10 2s8 3.58 8 8-3.58 8-8 8H2l2.5-2.5A7.95 7.95 0 0 1 2 10Z"
-                  stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                <path d="M7 10h6M10 7v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-              </svg>
-              {{ chatStore.attachedAlert?.id === alertStore.selectedAlert.id ? '已加入对话' : '加入对话' }}
-            </button>
-            <button
               class="popup-btn flow-btn"
-              @click="goToDefectFlow(alertStore.selectedAlert.id)"
+              @click="goToLifecycle(alertStore.selectedAlert!.id)"
             >
               <svg viewBox="0 0 20 20" fill="none" width="12" height="12" style="flex-shrink:0">
                 <path d="M4 10h12M10 4l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              查看处理流程
+              查看生命周期
             </button>
           </div>
         </div>
@@ -198,7 +197,6 @@ import { ref, computed, watch, nextTick, shallowRef, markRaw } from 'vue'
 import { useTiandituHeatmap } from '../../../composables/useTiandituHeatmap'
 import { useRouter } from 'vue-router'
 import { useAlertStore, type AlertPoint } from '../../../stores/alertStore'
-import { useChatStore } from '../../../stores/chatStore'
 import { useMapOverlayStore } from '../../../stores/mapOverlayStore'
 import {
   defectCategoryColor,
@@ -220,7 +218,6 @@ interface OverlayMapRow {
 
 const router = useRouter()
 const alertStore = useAlertStore()
-const chatStore = useChatStore()
 const mapOverlayStore = useMapOverlayStore()
 
 const loadConfig = { v: '4.0', tk: '7db4d1823b7788dc88066899e23df0d5' }
@@ -485,11 +482,22 @@ function closePopup() {
   infoTarget.value = null
 }
 
-function addToChat(alert: AlertPoint) { chatStore.attachAlert(alert) }
-
-function goToDefectFlow(id: number) {
-  router.push(`/defect/${id}`)
+function goToLifecycle(id: number) {
+  router.push({ name: 'workspace-defect', params: { id: String(id) } })
 }
+
+function goOverlayLifecycle(row: OverlayMapRow) {
+  mapOverlayStore.setFocusedOverlayForLifecycle({
+    lng: row.lng,
+    lat: row.lat,
+    disease_name: row.disease_name,
+    disease_category: row.disease_category,
+    disease_level: row.disease_level,
+    severity: row.severity,
+  })
+  router.push({ name: 'workspace-defect', params: { id: '0' }, query: { overlay: '1' } })
+}
+
 </script>
 
 <style scoped>

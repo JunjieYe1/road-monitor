@@ -92,7 +92,7 @@
               }}
             </button>
             <button class="d-btn flow-btn" @click="goFlow(selCard.alertId)">
-              → 查看处理流程
+              → 查看生命周期
             </button>
           </div>
         </div>
@@ -247,6 +247,17 @@ const baseCards = [
     unit: "上城区建设工程总公司",
     date: "2024-01-28",
     desc: "小型空洞修复完成，验收合格归档。",
+  },
+  {
+    id: 13,
+    alertId: 1,
+    status: "review",
+    type: "空洞",
+    severity: "high",
+    road: "延安路与庆春路交叉口",
+    unit: "上城区建设工程总公司",
+    date: "2024-03-22",
+    desc: "同一病害第二次进场：结构复检与标线恢复（演示多工单）。",
   },
 ];
 
@@ -455,7 +466,10 @@ function addCardToChat(card: (typeof allCards.value)[0]) {
   } as WorkorderContext);
 }
 function goFlow(alertId: number) {
-  router.push(`/defect/${alertId}`);
+  router.push({
+    name: "workspace-defect",
+    params: { id: String(alertId) },
+  });
 }
 </script>
 

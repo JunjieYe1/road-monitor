@@ -1,9 +1,5 @@
 /** 对话侧栏展示的虚拟智能体（与后端路由无关，纯前端人设） */
-export type ChatAgentIconKind =
-  | "luxiaoxun"
-  | "luxiaozhi"
-  | "luxiaoce"
-  | "luxiaoban";
+export type ChatAgentIconKind = "luxiaoxi" | "luxiaogui" | "luxiaoce";
 
 export interface ChatAgent {
   id: string;
@@ -19,63 +15,48 @@ export interface ChatAgent {
 
 export const CHAT_AGENTS: ChatAgent[] = [
   {
-    id: "luxiaoxun",
-    name: "路小巡",
-    subtitle: "道路智能监测助手",
+    id: "luxiaoxi",
+    name: "路小析",
+    subtitle: "道路健康数据分析专家",
     welcome:
-      "您好！我是路小巡，城市道路智能监测助手。我可以帮您分析道路病害数据、查询告警详情、生成报告、查看履约画像等。请问有什么需要帮助的？",
-    placeholderHint: "向路小巡提问，输入 @ 引用功能视图…",
-    streamingHint: "路小巡正在生成回复，请稍候…",
-    iconKind: "luxiaoxun",
+      "您好！我是路小析，道路健康数据分析专家，精通历年检测数据的「算账小能手」，主攻宏观统计与微观溯源。占位欢迎语，后续可替换为正式版本。",
+    placeholderHint: "向路小析提问检测数据与统计分析…",
+    streamingHint: "路小析正在生成回复，请稍候…",
+    iconKind: "luxiaoxi",
     quickQuestions: [
-      "今日高优先级告警有哪些？",
-      "上城区道路情况如何？",
-      "生成本周维修建议报告",
+      "近三年全市PCI优良路率走势？",
+      "解放路K2—K4段IRI哪年明显变差？",
+      "本月坑槽类病害哪个区最多？",
     ],
   },
   {
-    id: "luxiaozhi",
-    name: "路小知",
-    subtitle: "知识库与规范问答助手",
+    id: "luxiaogui",
+    name: "路小规",
+    subtitle: "监测标准与知识库专家",
     welcome:
-      "您好！我是路小知，擅长知识库检索与规范条文解读。可协助您梳理巡检标准、文档要点与入仓数据摘要。需要查什么？",
-    placeholderHint: "向路小知提问知识库、规范与文档…",
-    streamingHint: "路小知正在生成回复，请稍候…",
-    iconKind: "luxiaozhi",
+      "您好！我是路小规，监测标准与知识库专家。案头堆满国家标准和技术规范的「学霸老法师」，主攻答疑解惑。占位欢迎语，后续可替换为正式版本。",
+    placeholderHint: "向路小规提问标准规范与知识库…",
+    streamingHint: "路小规正在生成回复，请稍候…",
+    iconKind: "luxiaogui",
     quickQuestions: [
-      "当前知识库包含哪些主题文档？",
-      "巡检报告入库规范要点有哪些？",
-      "知识库最近一次更新在什么时候？",
+      "沥青路面PCI分级阈值分别是多少？",
+      "弯沉检测原始记录表要附哪几项？",
+      "坑槽应急填补常用哪条规范条款？",
     ],
   },
   {
     id: "luxiaoce",
     name: "路小策",
-    subtitle: "风险预判与策略建议",
+    subtitle: "养护决策与业务协同专家",
     welcome:
-      "您好！我是路小策，专注道路风险预判与维修策略。可帮您解读高风险路段、生成预案思路与报告大纲。从哪条路开始？",
-    placeholderHint: "向路小策提问风险分析、预案与策略…",
+      "您好！我是路小策，养护决策与业务协同专家。懂工程、懂预算、能排忧解难的「总工程师」，主攻出方案与防风险。占位欢迎语，后续可替换为正式版本。",
+    placeholderHint: "向路小策提问养护方案与业务协同…",
     streamingHint: "路小策正在生成回复，请稍候…",
     iconKind: "luxiaoce",
     quickQuestions: [
-      "未来3个月高风险路段有哪些？",
-      "解放路一带塌陷风险如何评估？",
-      "生成本片区风险预判摘要",
-    ],
-  },
-  {
-    id: "luxiaoban",
-    name: "路小办",
-    subtitle: "工单与运营管理助手",
-    welcome:
-      "您好！我是路小办，熟悉工单流转与运维调度。可协助跟进处置进度、计划排期与单位协同相关问题。今天办哪一单？",
-    placeholderHint: "向路小办提问工单、排期与运营管理…",
-    streamingHint: "路小办正在生成回复，请稍候…",
-    iconKind: "luxiaoban",
-    quickQuestions: [
-      "显示当前待处理工单列表",
-      "哪些工单已超期未闭环？",
-      "生成下月巡检与处置排期建议",
+      "5cm铣刨加铺单方造价大概多少？",
+      "两方案工期与封路影响怎么取舍？",
+      "超期工单建议先催哪家责任单位？",
     ],
   },
 ];
