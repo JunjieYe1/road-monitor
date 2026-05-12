@@ -41,7 +41,7 @@
           <span class="genshin-subtitle lc-toolbar-heading">病害生命周期</span>
           <span class="lc-toolbar-sep" aria-hidden="true">·</span>
           <span class="lc-toolbar-code"
-            >#{{ current!.id }} · {{ current!.type }}</span
+            >{{ groupTitle }}</span
           >
         </div>
         <div class="lc-toolbar-actions">
@@ -66,7 +66,6 @@
     </ViewToolbar>
 
     <div class="lifecycle-stack">
-      <!-- 信息摘要 -->
       <div class="neu-card info-card">
         <div class="info-left">
           <SeverityBadge :level="current!.severity" />
@@ -77,66 +76,76 @@
           {{ current!.description || "路面病害记录。" }}
         </div>
         <div class="info-right">
-          <div class="info-meta">所属区域：{{ current!.district }}</div>
-          <div class="info-meta">上报时间：{{ current!.time }}</div>
           <div class="info-meta">
-            坐标：{{ current!.lat.toFixed(5) }}, {{ current!.lng.toFixed(5) }}
+            群组范围：{{ current!.district }} · 半径 {{ GROUP_RADIUS_METERS }}m
+          </div>
+          <div class="info-meta">群组病害数：{{ groupedAlerts.length }}</div>
+          <div class="info-meta">
+            高危病害：{{ groupedAlerts.filter((x) => x.severity === "high").length }}
           </div>
         </div>
       </div>
 
-      <!-- 病害状态生命周期 -->
       <div class="neu-card flow-card">
-        <div class="section-title">生命周期追踪</div>
-        <div class="stages-row u-scrollbar-hidden">
+        <div class="section-title">生命周期时间轴</div>
+        <div
+          class="stages-row u-scrollbar-hidden"
+          :style="{ '--stage-arrow-width': `${stageArrowWidth}px` }"
+        >
           <div
-            v-for="(ph, i) in bundle.phases"
-            :key="ph.key"
+            v-for="(node, i) in timelineNodes"
+            :key="node.key"
             class="stage-wrap"
-            @click="selStage = i"
+            @click="onSelectStage(i)"
           >
             <div class="stage-node" :class="stageNodeClass(i)">
               <div class="stage-circle">
-                <span v-if="i < activeVisualIdx">✓</span>
-                <span
-                  v-else-if="i === activeVisualIdx"
-                  class="pulse-ring"
-                ></span>
-                <span v-else>{{ i + 1 }}</span>
+                <span>{{ i + 1 }}</span>
               </div>
-              <div class="stage-label">{{ ph.label }}</div>
+              <div class="stage-label">{{ node.title }}</div>
               <div class="stage-sub">
-                {{ ph.workOrders.length }} 个工单 · {{ ph.observedAt }}
+                {{ node.workOrders.length }} 个工单 · {{ node.observedAt }}
+              </div>
+              <div class="stage-tags">
+                <span
+                  v-for="tag in node.tags"
+                  :key="`${node.key}-${tag}`"
+                  class="stage-tag"
+                >
+                  {{ tag }}
+                </span>
               </div>
             </div>
-            <div
-              v-if="i < bundle.phases.length - 1"
-              class="stage-line"
-              :class="{ done: i < activeVisualIdx }"
-            />
+            <div v-if="i < timelineNodes.length - 1" class="stage-arrow" />
           </div>
         </div>
 
         <transition name="stage-detail" mode="out-in">
-          <div :key="selStage" class="stage-detail">
+          <div :key="selectedNode.key" class="stage-detail">
             <div class="detail-row">
               <span class="dr-label">病害状态</span>
-              <span class="dr-val state-name">{{ selectedPhase.label }}</span>
+              <span class="dr-val state-name">{{ selectedNode.stateLabel }}</span>
             </div>
             <div class="detail-row">
-              <span class="dr-label">状态时间</span>
-              <span class="dr-val">{{ selectedPhase.observedAt }}</span>
+              <span class="dr-label">节点对象</span>
+              <span class="dr-val"
+                >#{{ selectedNode.alert.id }} · {{ selectedNode.alert.type }}</span
+              >
+            </div>
+            <div class="detail-row">
+              <span class="dr-label">发现时间</span>
+              <span class="dr-val">{{ selectedNode.observedAt }}</span>
             </div>
             <div class="detail-row">
               <span class="dr-label">变化来源</span>
-              <span class="dr-val">{{ selectedPhase.changeReason }}</span>
+              <span class="dr-val">{{ selectedNode.changeReason }}</span>
             </div>
             <div class="workorder-group">
               <div class="workorder-group-title">
-                支撑该状态的工单（{{ selectedPhase.workOrders.length }}）
+                关联工单（{{ selectedNode.workOrders.length }}）
               </div>
               <div
-                v-for="wo in selectedPhase.workOrders"
+                v-for="wo in selectedNode.workOrders"
                 :key="wo.woNo + wo.title"
                 class="state-wo neu-card-sm"
               >
@@ -153,20 +162,17 @@
         </transition>
       </div>
 
-      <!-- 状态分析 + 邻近 -->
       <div class="neu-card analyze-card">
         <div class="analyze-head">
           <div class="analyze-title-block">
-            <div class="section-title analyze-title">
-              病害状态与邻近病害智能分析
-            </div>
+            <div class="section-title analyze-title">病害状态智能分析</div>
             <div class="analyze-subtitle">
-              结合当前状态链、周边病害距离与等级，给出空间关联判断
+              基于同区域+邻近距离分组，对生命周期节点和群组风险进行综合判断
             </div>
           </div>
           <div class="analytics-row">
             <div
-              v-for="a in bundle.analytics"
+              v-for="a in groupAnalytics"
               :key="a.label"
               class="analytics-pill neu-card-sm"
             >
@@ -178,104 +184,22 @@
 
         <div v-if="hasCoords" class="prox-grid">
           <div class="prox-map-panel">
-            <div class="panel-mini-title">空间上下文小地图</div>
             <DefectContextMiniMap
               class="prox-map"
-              :current="mapCurrent"
-              :neighbors="neighborPoints"
-              :selected-neighbor-id="selectedNeighborId"
+              :points="distributionPoints"
+              :selected-point-id="selectedDistributionId"
+              @select-point="onSelectDistributionPoint"
             />
           </div>
-          <div class="neighbor-panel">
-            <div class="panel-mini-title">
-              最近邻近病害（{{ neighborRows.length }}）
-            </div>
-            <div class="neighbor-list">
-              <div
-                v-for="row in neighborRows"
-                :key="row.alert.id"
-                class="neighbor-row neu-card-sm"
-                :class="{ active: selectedNeighborId === row.alert.id }"
-                @click="selectedNeighborId = row.alert.id"
-              >
-                <SeverityBadge :level="row.alert.severity" size="sm" />
-                <div class="nr-body">
-                  <div class="nr-line">
-                    <span>{{ row.alert.type }}</span>
-                    <span class="nr-dist">{{ formatDist(row.distanceM) }}</span>
-                  </div>
-                  <div class="nr-addr">{{ row.alert.address }}</div>
-                </div>
-                <button
-                  type="button"
-                class="lc-button lc-button-ghost nr-link"
-                  @click.stop="goNeighborLifecycle(row.alert.id)"
-                >
-                  查看生命周期
-                </button>
-              </div>
-              <div v-if="neighborRows.length === 0" class="neighbor-empty">
-                暂无其它告警点可比对（或数据未加载）。
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-else class="no-coords">暂无有效坐标，无法计算邻近病害。</div>
-
-        <div class="correlation-block neu-inset">
-          <div class="corr-title">关联影响（演示规则 + 预制文案）</div>
-          <p v-for="(line, idx) in correlationLines" :key="idx" class="corr-p">
-            {{ line }}
-          </p>
-          <p class="corr-footnote">演示数据，不作为决策依据。</p>
-        </div>
-      </div>
-
-      <!-- 分享评估 -->
-      <div class="neu-card share-card">
-        <div class="share-head">
-          <div>
-            <div class="section-title share-title">分享评估</div>
-            <div class="share-subtitle">
-              面向汇报、转办和复盘的简版说明，当前由演示数据生成
-            </div>
-          </div>
-          <button
-            type="button"
-            class="lc-button lc-button-primary"
-            @click="copyShareText"
-          >
-            复制摘要
-          </button>
-        </div>
-
-        <div class="share-layout">
-          <div class="share-body neu-inset">
-            <div class="share-doc-title">病害生命周期评估摘要</div>
-            <p
-              v-for="(p, i) in bundle.shareParagraphs"
-              :key="i"
-              class="share-p"
-            >
-              {{ p }}
+          <div class="impact-panel neu-inset">
+            <div class="corr-title">关联影响分析</div>
+            <p v-for="(line, idx) in impactLines" :key="idx" class="corr-p">
+              {{ line }}
             </p>
-          </div>
-
-          <div class="share-side">
-            <div class="share-side-title">摘要要点</div>
-            <div
-              v-for="a in bundle.analytics"
-              :key="`share-${a.label}`"
-              class="share-side-row"
-            >
-              <span>{{ a.label }}</span>
-              <strong>{{ a.value }}</strong>
-            </div>
-            <div class="share-side-note">
-              可复制到对话、工单备注或汇报材料中继续编辑。
-            </div>
+            <p class="corr-footnote">基于演示规则生成，用于页面交互验证。</p>
           </div>
         </div>
+        <div v-else class="no-coords">暂无有效坐标，无法计算群组病害分布。</div>
       </div>
     </div>
   </div>
@@ -301,11 +225,25 @@ import { useMapOverlayStore } from "../../stores/mapOverlayStore";
 import {
   getLifecycleMockForAlertId,
   getLifecycleMockForOverlay,
-  buildCorrelationSummaryLines,
+  type LifecycleWoPayload,
 } from "../../defect/lifecycleMocks";
 import { haversineMeters } from "../../utils/geoDistance";
 
 const SYNTHETIC_OVERLAY_ALERT_ID = -1;
+const GROUP_RADIUS_METERS = 350;
+const OVERLAY_DUPLICATE_DISTANCE_METERS = 8;
+
+function parseRouteAlertId(raw: unknown): number | null {
+  const id = typeof raw === "string" ? Number.parseInt(raw, 10) : Number(raw);
+  if (!Number.isFinite(id) || id === SYNTHETIC_OVERLAY_ALERT_ID) {
+    return null;
+  }
+  return id;
+}
+
+function isValidCoord(lat: number, lng: number) {
+  return Number.isFinite(lat) && Number.isFinite(lng);
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -327,11 +265,28 @@ const scrollHooks = { onEnter, onLeave };
 
 const ready = ref(false);
 const selStage = ref(0);
-const selectedNeighborId = ref<number | null>(null);
+const selectedDistributionId = ref<number | null>(null);
 
 const isOverlayMode = computed(() => route.query.overlay === "1");
 
 const overlaySnap = computed(() => mapOverlayStore.focusedOverlayForLifecycle);
+
+const STATUS_LABEL_MAP: Record<AlertPoint["status"], string> = {
+  pending: "待处理",
+  processing: "处理中",
+  completed: "已修复",
+};
+
+function statusText(status: AlertPoint["status"]) {
+  return STATUS_LABEL_MAP[status];
+}
+
+function timeWeight(raw: string): number {
+  const ms = Date.parse(raw);
+  if (Number.isFinite(ms)) return ms;
+  const num = Number.parseInt(raw.replace(/[^\d]/g, ""), 10);
+  return Number.isFinite(num) ? num : 0;
+}
 
 const current = computed<AlertPoint | null>(() => {
   if (isOverlayMode.value && overlaySnap.value) {
@@ -349,10 +304,9 @@ const current = computed<AlertPoint | null>(() => {
       description: "来源：智能体地图叠加查询结果（演示）",
     };
   }
-  const raw = route.params.id;
-  const id = typeof raw === "string" ? Number.parseInt(raw, 10) : Number(raw);
-  if (!Number.isFinite(id) || id === SYNTHETIC_OVERLAY_ALERT_ID) return null;
-  return alertStore.alerts.find((a) => a.id === id) ?? null;
+  const id = parseRouteAlertId(route.params.id);
+  if (id === null) return null;
+  return alertStore.baseAlerts.find((a) => a.id === id) ?? null;
 });
 
 const notFound = computed(() => {
@@ -365,18 +319,97 @@ const overlayMissing = computed(
   () => ready.value && isOverlayMode.value && !overlaySnap.value,
 );
 
-const bundle = computed(() => {
-  if (isOverlayMode.value) return getLifecycleMockForOverlay();
-  const id = current.value?.id ?? 1;
-  return getLifecycleMockForAlertId(id);
+const hasCoords = computed(() => {
+  const c = current.value;
+  if (!c) return false;
+  return isValidCoord(c.lat, c.lng);
 });
 
-const selectedPhase = computed(() => bundle.value.phases[selStage.value]!);
+const groupedAlerts = computed<AlertPoint[]>(() => {
+  const c = current.value;
+  if (!c || !hasCoords.value) return c ? [c] : [];
+  const inGroup = alertStore.baseAlerts
+    .filter((a) => a.district === c.district)
+    .filter((a) => isValidCoord(a.lat, a.lng))
+    .filter((a) => {
+      const dist = haversineMeters(c.lat, c.lng, a.lat, a.lng);
+      if (c.id === SYNTHETIC_OVERLAY_ALERT_ID) {
+        return dist > OVERLAY_DUPLICATE_DISTANCE_METERS && dist <= GROUP_RADIUS_METERS;
+      }
+      return dist <= GROUP_RADIUS_METERS;
+    });
+  const ids = new Set(inGroup.map((a) => a.id));
+  if (!ids.has(c.id)) inGroup.push(c);
+  return [...inGroup].sort(
+    (a, b) => timeWeight(a.time) - timeWeight(b.time) || a.id - b.id,
+  );
+});
 
-/** 视觉上「进行到哪一 stage」——用于节点勾号，不用于交互推进 */
-const activeVisualIdx = computed(() =>
-  Math.min(bundle.value.activePhaseIdx, bundle.value.phases.length - 1),
-);
+const groupTitle = computed(() => {
+  const c = current.value;
+  if (!c) return "病害生命周期";
+  return `${c.district} 群组 · ${groupedAlerts.value.length}个病害`;
+});
+
+interface TimelineNode {
+  key: string;
+  title: string;
+  observedAt: string;
+  stateLabel: string;
+  changeReason: string;
+  tags: string[];
+  workOrders: LifecycleWoPayload[];
+  alert: AlertPoint;
+}
+
+function lifecycleStateForAlert(alert: AlertPoint) {
+  if (alert.id === SYNTHETIC_OVERLAY_ALERT_ID) {
+    return getLifecycleMockForOverlay();
+  }
+  return getLifecycleMockForAlertId(alert.id);
+}
+
+function nodeTags(alert: AlertPoint, stateLabel: string, isCurrent: boolean) {
+  const tags = [statusText(alert.status)];
+  if (stateLabel.includes("修复") || alert.status === "completed") {
+    tags.push("含修复状态");
+  }
+  if (isCurrent) tags.push("当前点");
+  return tags;
+}
+
+const timelineNodes = computed<TimelineNode[]>(() => {
+  const c = current.value;
+  if (!c) return [];
+  return groupedAlerts.value.map((alert) => {
+    const pack = lifecycleStateForAlert(alert);
+    const activeIdx = Math.min(pack.activePhaseIdx, pack.phases.length - 1);
+    const phase = pack.phases[activeIdx] ?? pack.phases[0];
+    const stateLabel = phase?.label ?? statusText(alert.status);
+    return {
+      key: `${alert.id}-${phase?.key ?? "phase"}`,
+      title: `${alert.type} #${alert.id}`,
+      observedAt: alert.time || phase?.observedAt || "未知",
+      stateLabel,
+      changeReason: phase?.changeReason ?? "由巡检发现后进入群组生命周期跟踪。",
+      tags: nodeTags(alert, stateLabel, alert.id === c.id),
+      workOrders: phase?.workOrders ?? [],
+      alert,
+    };
+  });
+});
+
+const activeVisualIdx = computed(() => {
+  if (timelineNodes.value.length === 0) return 0;
+  return Math.min(selStage.value, timelineNodes.value.length - 1);
+});
+
+const stageArrowWidth = computed(() => {
+  const count = timelineNodes.value.length;
+  if (count <= 3) return 74;
+  if (count <= 5) return 58;
+  return 44;
+});
 
 function stageNodeClass(i: number) {
   if (i < activeVisualIdx.value) return "done";
@@ -384,67 +417,91 @@ function stageNodeClass(i: number) {
   return "pending";
 }
 
-const hasCoords = computed(() => {
-  const c = current.value;
-  if (!c) return false;
-  return Number.isFinite(c.lat) && Number.isFinite(c.lng);
+const selectedNode = computed<TimelineNode>(() => {
+  return timelineNodes.value[selStage.value] ?? timelineNodes.value[0]!;
 });
 
-const neighborRows = computed(() => {
-  const c = current.value;
-  if (!c || !hasCoords.value) return [];
-  const rows = alertStore.alerts
-    .filter((a) => {
-      if (a.id === c.id) return false;
-      if (c.id === SYNTHETIC_OVERLAY_ALERT_ID) {
-        return haversineMeters(c.lat, c.lng, a.lat, a.lng) > 8;
-      }
-      return true;
-    })
-    .map((a) => ({
-      alert: a,
-      distanceM: haversineMeters(c.lat, c.lng, a.lat, a.lng),
-    }))
-    .sort((x, y) => x.distanceM - y.distanceM)
-    .slice(0, 5);
-  return rows;
-});
-
-const neighborPoints = computed(() =>
-  neighborRows.value.map((r) => r.alert),
+const distributionPoints = computed(() =>
+  groupedAlerts.value.map((a) => ({
+    id: a.id,
+    lat: a.lat,
+    lng: a.lng,
+    severity: a.severity,
+    type: a.type,
+    district: a.district,
+    address: a.address,
+    statusText: statusText(a.status),
+  })),
 );
 
-const mapCurrent = computed(() => {
-  const c = current.value!;
-  return {
-    id: c.id,
-    lat: c.lat,
-    lng: c.lng,
-    severity: c.severity,
-  };
+const nearestDistanceM = computed(() => {
+  const c = current.value;
+  if (!c || !hasCoords.value) return null;
+  const distances = groupedAlerts.value
+    .filter((a) => a.id !== c.id)
+    .map((a) => haversineMeters(c.lat, c.lng, a.lat, a.lng));
+  if (distances.length === 0) return null;
+  return Math.min(...distances);
 });
 
-const correlationLines = computed(() => {
-  const c = current.value;
-  const nearest = neighborRows.value[0]?.distanceM ?? null;
-  const hasHigh = neighborRows.value.some((r) => r.alert.severity === "high");
-  const sameDist = c
-    ? neighborRows.value.filter((r) => r.alert.district === c.district)
-        .length
-    : 0;
-  return buildCorrelationSummaryLines({
-    nearestMeters: nearest,
-    neighborCountShown: neighborRows.value.length,
-    hasHighNeighbor: hasHigh,
-    sameDistrictCount: sameDist,
-    mockParagraphs: [...bundle.value.correlationBlurb],
-  });
+const groupAnalytics = computed(() => {
+  const rows = groupedAlerts.value;
+  const highCount = rows.filter((x) => x.severity === "high").length;
+  const repairedCount = rows.filter((x) => x.status === "completed").length;
+  return [
+    { label: "群组病害", value: `${rows.length} 个` },
+    { label: "高危病害", value: `${highCount} 个` },
+    { label: "已修复", value: `${repairedCount} 个` },
+    { label: "当前节点状态", value: selectedNode.value?.stateLabel ?? "—" },
+  ];
 });
+
+const impactLines = computed(() => {
+  const rows = groupedAlerts.value;
+  const c = current.value;
+  if (!c) return [];
+  const lines: string[] = [];
+  lines.push(
+    `当前以“${c.district} + ${GROUP_RADIUS_METERS}m”形成临时群组，共识别 ${rows.length} 个病害对象。`,
+  );
+  if (nearestDistanceM.value != null) {
+    lines.push(
+      `最近病害点距当前点约 ${Math.round(nearestDistanceM.value)}m，建议同窗口安排复测与养护。`,
+    );
+  }
+  const processingCount = rows.filter((x) => x.status === "processing").length;
+  if (processingCount > 0) {
+    lines.push(`群组内有 ${processingCount} 个病害处于处理中，需关注工单并发与资源冲突。`);
+  }
+  const highCount = rows.filter((x) => x.severity === "high").length;
+  if (highCount >= 2) {
+    lines.push("高危病害数量较高，建议优先进行片区化处置和交通组织联动。");
+  } else {
+    lines.push("当前群组风险总体可控，建议保持周期巡检并跟踪状态变化。");
+  }
+  return lines;
+});
+
+function onSelectDistributionPoint(id: number) {
+  selectedDistributionId.value = id;
+  const idx = timelineNodes.value.findIndex((node) => node.alert.id === id);
+  if (idx >= 0) selStage.value = idx;
+}
+
+/** 时间轴节点点击：与右侧小地图选中点联动 */
+function onSelectStage(i: number) {
+  selStage.value = i;
+  const node = timelineNodes.value[i];
+  if (node) selectedDistributionId.value = node.alert.id;
+}
 
 watch(
-  () => bundle.value,
-  (b) => {
-    selStage.value = Math.min(b.activePhaseIdx, b.phases.length - 1);
+  timelineNodes,
+  (nodes) => {
+    if (nodes.length === 0) return;
+    selStage.value = nodes.length - 1;
+    const currentId = current.value?.id ?? nodes[nodes.length - 1]!.alert.id;
+    selectedDistributionId.value = currentId;
   },
   { immediate: true },
 );
@@ -460,7 +517,7 @@ watch(
 
 onBeforeUnmount(() => {
   chatStore.clearLifecyclePin();
-  if (route.query.overlay === "1") {
+  if (isOverlayMode.value) {
     mapOverlayStore.setFocusedOverlayForLifecycle(null);
   }
 });
@@ -473,34 +530,8 @@ onMounted(async () => {
   await nextTick();
 });
 
-function formatDist(m: number) {
-  if (m < 1000) return `${Math.round(m)} m`;
-  return `${(m / 1000).toFixed(2)} km`;
-}
-
 function goWorkspace() {
   router.push({ name: "workspace" });
-}
-
-function goNeighborLifecycle(id: number) {
-  router.push({
-    name: "workspace-defect",
-    params: { id: String(id) },
-    query: {},
-  });
-}
-
-async function copyShareText() {
-  const text = [
-    ...bundle.value.shareParagraphs,
-    "",
-    ...correlationLines.value,
-  ].join("\n");
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    /* ignore */
-  }
 }
 </script>
 
@@ -786,16 +817,49 @@ async function copyShareText() {
 .stage-node.active .stage-sub {
   color: var(--genshin-blue);
 }
-.stage-line {
-  flex: 1;
-  min-width: 40px;
-  height: 2px;
-  background: var(--neu-stroke-muted-strong);
-  transition: background 0.4s;
-  margin-top: -30px;
+.stage-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
 }
-.stage-line.done {
-  background: linear-gradient(90deg, #5cad8a, #7dc4a5);
+.stage-tag {
+  font-size: 10px;
+  color: #5a6a7c;
+  border: 1px solid var(--neu-stroke-muted);
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: rgba(255, 255, 255, 0.6);
+}
+.stage-arrow {
+  position: relative;
+  width: var(--stage-arrow-width, 44px);
+  height: 44px;
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+.stage-arrow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 10px;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, #9fb2c7 0%, #6d8aa9 100%);
+  border-radius: 999px;
+}
+.stage-arrow::after {
+  content: "";
+  position: absolute;
+  right: 1px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateY(-50%) rotate(45deg);
+  border-top: 2px solid #6d8aa9;
+  border-right: 2px solid #6d8aa9;
+  border-radius: 1px;
 }
 
 .stage-detail {
@@ -936,6 +1000,11 @@ async function copyShareText() {
 .prox-map-panel,
 .neighbor-panel {
   min-width: 0;
+}
+.impact-panel {
+  padding: 12px 14px;
+  border-radius: 12px;
+  height: 300px;
 }
 .panel-mini-title {
   margin-bottom: 8px;

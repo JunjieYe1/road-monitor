@@ -13,6 +13,29 @@
             @click="activeLayer = l.key"
           >{{ l.label }}</button>
         </div>
+        <div class="year-switch">
+          <button
+            v-for="year in yearOptions"
+            :key="year"
+            class="year-btn"
+            :class="{ active: alertStore.selectedYear === year }"
+            @click="alertStore.selectedYear = year"
+          >
+            {{ year }}
+          </button>
+        </div>
+        <div class="district-select-wrap">
+          <span class="district-label">杭州区域</span>
+          <select v-model="alertStore.selectedDistrict" class="district-select">
+            <option
+              v-for="district in alertStore.districtOptions"
+              :key="district"
+              :value="district"
+            >
+              {{ district }}
+            </option>
+          </select>
+        </div>
         <!-- 类型筛选（仅病害分布层显示）-->
         <transition name="fade-in">
           <div v-if="activeLayer === 'defect' && !hasOverlay" class="filter-group">
@@ -26,12 +49,6 @@
             >{{ f.label }}</button>
           </div>
         </transition>
-      </div>
-      <div class="map-stats">
-        <span v-for="item in severityStats" :key="item.key" class="mstat">
-          <span class="mstat-dot" :style="{ background: item.color }"></span>
-          {{ item.label }} {{ item.count }}
-        </span>
       </div>
     </div>
 
@@ -70,7 +87,6 @@
               @click="() => onMarkerClick(alert)"
             />
           </template>
-          <tdt-infowindow v-model:target="infoTarget" :content="infoContent" :offset="[0, -36]" />
         </template>
 
         <!-- 热力图层：heatmap.js Canvas 叠加（见 composable/useTiandituHeatmap） -->
@@ -225,8 +241,6 @@ const mapCenter = ref([120.155, 30.274])
 const mapZoom = ref(12)
 /** 天地图实例勿用 ref() 深响应，否则会把 T.Map 包成 Proxy，坐标 API 失效 */
 const mapInstance = shallowRef<any>(null)
-const infoTarget = ref<any>(null)
-const infoContent = ref('')
 
 /* ── 图层切换 ── */
 const layers = [
@@ -239,7 +253,7 @@ const activeLayer = ref<string>('defect')
 /* ── 类型筛选（与当前数据中出现的病害分类一致） ── */
 const activeFilter = ref<string>('all')
 const filters = computed(() => {
-  const keys = [...new Set(alertStore.alerts.map((a) => a.type))]
+  const keys = [...new Set(alertStore.filteredAlerts.map((a) => a.type))]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b, 'zh-CN'))
   return [
@@ -252,10 +266,12 @@ const filters = computed(() => {
   ]
 })
 
+const yearOptions = [2025, 2024, 2023] as const
+
 const filteredAlerts = computed(() =>
   activeFilter.value === 'all'
-    ? alertStore.alerts
-    : alertStore.alerts.filter(a => a.type === activeFilter.value)
+    ? alertStore.filteredAlerts
+    : alertStore.filteredAlerts.filter(a => a.type === activeFilter.value)
 )
 
 const overlayRows = computed<OverlayMapRow[]>(() =>
@@ -272,26 +288,6 @@ const overlayRows = computed<OverlayMapRow[]>(() =>
 
 const hasOverlay = computed(() => overlayRows.value.length > 0)
 
-const severityStats = computed(() => {
-  const keys = ['high', 'medium', 'low'] as const
-  if (hasOverlay.value) {
-    const counts = { high: 0, medium: 0, low: 0 }
-    for (const r of overlayRows.value) counts[r.severity]++
-    return keys.map(key => ({
-      key,
-      label: key === 'high' ? '高危' : key === 'medium' ? '中危' : '低危',
-      color: SEV_COLORS[key],
-      count: counts[key],
-    }))
-  }
-  return keys.map(key => ({
-    key,
-    label: key === 'high' ? '高危' : key === 'medium' ? '中危' : '低危',
-    color: SEV_COLORS[key],
-    count: alertStore.severitySummary[key],
-  }))
-})
-
 const heatMarkers = computed(() => {
   if (hasOverlay.value) {
     return overlayRows.value.map(r => ({
@@ -301,7 +297,7 @@ const heatMarkers = computed(() => {
       severity: r.severity,
     }))
   }
-  return alertStore.alerts.map(a => ({
+  return alertStore.filteredAlerts.map(a => ({
     key: `h-${a.id}`,
     lng: a.lng,
     lat: a.lat,
@@ -448,26 +444,12 @@ function onOverlayMarkerClick(row: OverlayMapRow) {
   selectedOverlay.value = row
   alertStore.selectAlert(null)
   mapCenter.value = [row.lng, row.lat]
-  infoContent.value = `
-    <div style="font-family:'Noto Sans SC',sans-serif;padding:4px 6px;min-width:140px">
-      <div style="font-weight:600;color:#1A3A52;font-size:13px">${row.disease_name || '病害点'}</div>
-      <div style="font-size:11px;color:#6B7A8C;margin-top:3px">${row.disease_category} · ${row.disease_level}</div>
-    </div>
-  `
-  setTimeout(() => { infoTarget.value = [row.lng, row.lat] }, 50)
 }
 
 function onMarkerClick(alert: AlertPoint) {
   selectedOverlay.value = null
   alertStore.selectAlert(alert)
   mapCenter.value = [alert.lng, alert.lat]
-  infoContent.value = `
-    <div style="font-family:'Noto Sans SC',sans-serif;padding:4px 6px;min-width:140px">
-      <div style="font-weight:600;color:#1A3A52;font-size:13px">${alert.type} · ${alert.district}</div>
-      <div style="font-size:11px;color:#6B7A8C;margin-top:3px">${alert.address}</div>
-    </div>
-  `
-  setTimeout(() => { infoTarget.value = [alert.lng, alert.lat] }, 50)
 }
 
 function onHealthClick(road: typeof healthRoads.value[0]) {
@@ -479,7 +461,6 @@ function onMapClick() { closePopup() }
 function closePopup() {
   alertStore.selectAlert(null)
   selectedOverlay.value = null
-  infoTarget.value = null
 }
 
 function goToLifecycle(id: number) {
@@ -501,7 +482,15 @@ function goOverlayLifecycle(row: OverlayMapRow) {
 </script>
 
 <style scoped>
+@import "../../../styles/map-infowindow.shared.css";
+
 .map-view {
+  --map-infowindow-radius: 10px;
+  --map-infowindow-border: 1px solid rgba(212, 168, 83, 0.3);
+  --map-infowindow-bg: rgba(244, 247, 251, 0.86);
+  --map-infowindow-shadow: 4px 4px 12px rgba(0, 0, 0, 0.2);
+  --map-infowindow-tip-display: block;
+  --map-infowindow-tip-filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.15));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -561,6 +550,63 @@ function goOverlayLifecycle(row: OverlayMapRow) {
   flex-wrap: wrap;
 }
 
+.year-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-groove);
+  border-radius: 10px;
+  padding: 3px;
+  box-shadow: var(--neu-inset-shallow);
+}
+
+.year-btn {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #8a9aac;
+  background: transparent;
+  font-family: 'Noto Sans SC', sans-serif;
+  transition: all 0.2s;
+}
+
+.year-btn.active {
+  background: var(--bg-color);
+  color: var(--genshin-blue);
+  box-shadow: var(--neu-extrude-back);
+}
+
+.district-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.district-label {
+  font-size: 11px;
+  color: #6b7a8c;
+  white-space: nowrap;
+}
+
+.district-select {
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--neu-stroke-muted);
+  background: var(--bg-color);
+  color: var(--genshin-blue-dark);
+  font-size: 11px;
+  font-family: 'Noto Sans SC', sans-serif;
+  padding: 0 8px;
+  box-shadow: var(--neu-extrude-sm);
+  outline: none;
+}
+
+.district-select:focus {
+  border-color: rgba(74, 141, 183, 0.5);
+}
+
 .filter-btn {
   font-size: 11px;
   padding: 3px 9px;
@@ -574,14 +620,6 @@ function goOverlayLifecycle(row: OverlayMapRow) {
   box-shadow: var(--neu-extrude-sm);
 }
 
-.map-stats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.mstat { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #5A6A7C; }
-.mstat-dot { width: 8px; height: 8px; border-radius: 50%; }
-
 /* 地图容器 */
 .map-container {
   flex: 1;
@@ -592,12 +630,6 @@ function goOverlayLifecycle(row: OverlayMapRow) {
 }
 .tdt-map-el { width: 100% !important; height: 100% !important; }
 :deep(.tdt-container) { filter: sepia(15%) saturate(0.92) hue-rotate(8deg); }
-:deep(.tdt-infowindow-content-wrapper) {
-  border-radius: 10px !important;
-  box-shadow: 4px 4px 12px rgba(0,0,0,0.2) !important;
-  border: 1px solid rgba(212,168,83,0.3) !important;
-}
-:deep(.tdt-infowindow-tip-container) { filter: drop-shadow(0 2px 2px rgba(0,0,0,0.15)); }
 
 /* 弹窗 */
 .alert-popup, .health-popup {

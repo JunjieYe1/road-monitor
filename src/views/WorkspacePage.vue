@@ -5,7 +5,7 @@
       <div class="corner-decor tl"></div>
       <div class="corner-decor tr"></div>
 
-      <!-- 左侧：天气 + 返回按钮 -->
+      <!-- 左侧：天气 -->
       <div class="header-left">
         <!-- 天气信息 TODO: API - GET /api/weather?city=杭州 -->
         <div class="weather-block">
@@ -33,25 +33,12 @@
             </div>
           </div>
         </div>
-        <div class="header-divider"></div>
-        <button class="back-btn" @click="$router.push('/')">
-          <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
-            <path
-              d="M12 4l-6 6 6 6"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          <span>返回</span>
-        </button>
       </div>
 
       <!-- 平台标题（绝对居中） -->
       <div class="title-area">
         <span class="deco-diamond">◆</span>
-        <h1 class="genshin-title main-title">智能体赋能城市道路病害监测平台</h1>
+        <h1 class="genshin-title main-title">城市道路地下病害服务平台</h1>
         <span class="deco-diamond">◆</span>
       </div>
 
@@ -72,19 +59,17 @@
     <main
       class="main-content"
       :class="{
-        'chat-wide': chatWide && !hideRightChatOnReport,
-        'collect-mode': isCollectMode,
-        'rightchat-hidden': hideRightChatOnReport,
+        'chat-wide': chatWide,
       }"
     >
-      <LeftPanel v-if="!isCollectMode && !isDefectLifecycleRoute" class="left-panel" />
+      <LeftPanel v-if="!isDefectLifecycleRoute" class="left-panel" />
       <DefectLifecyclePanel
         v-if="isDefectLifecycleRoute"
         class="center-panel lifecycle-center"
       />
       <Canvas v-if="!isDefectLifecycleRoute" class="center-panel" />
       <RightChat
-        v-if="!isCollectMode && !hideRightChatOnReport"
+        v-if="!isDefectLifecycleRoute"
         v-model:wide="chatWide"
         class="right-panel"
       />
@@ -103,6 +88,7 @@ import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import { useCanvasStore } from "../stores/canvasStore";
 import { useAlertStore } from "../stores/alertStore";
+import { useUiStore } from "../stores/uiStore";
 import { formatLocaleDateTimeClock } from "../utils/localeFormat";
 
 const route = useRoute();
@@ -111,6 +97,7 @@ const auth = useAuthStore();
 const chatStore = useChatStore();
 const canvasStore = useCanvasStore();
 const alertStore = useAlertStore();
+const uiStore = useUiStore();
 
 const isDefectLifecycleRoute = computed(
   () => route.name === "workspace-defect",
@@ -118,10 +105,6 @@ const isDefectLifecycleRoute = computed(
 
 /** 对话栏加宽：隐藏左侧栏，对话区约占半屏 */
 const chatWide = ref(false);
-const isCollectMode = computed(() => canvasStore.agentMode === "collect");
-const hideRightChatOnReport = computed(
-  () => canvasStore.getActiveTab()?.type === "report",
-);
 
 const currentTime = ref("");
 function updateTime() {
@@ -150,8 +133,16 @@ watch(
   (nextId, prevId) => {
     if (!prevId || nextId === prevId) return;
     if (route.name === "workspace-defect") return;
+    if (canvasStore.consumeSkipChatResetOnNextTabChange()) return;
     alertStore.restoreAlertsAfterMapControl();
     chatStore.startNewChat(false);
+  },
+);
+
+watch(
+  () => uiStore.collapseChatWideSignal,
+  () => {
+    chatWide.value = false;
   },
 );
 
@@ -200,28 +191,6 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--neu-stroke-faint);
-  background: var(--bg-color);
-  cursor: pointer;
-  color: #2c3e50;
-  font-size: 12px;
-  font-family: "Noto Sans SC", sans-serif;
-  font-weight: 500;
-  box-shadow: var(--neu-extrude-back);
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-.back-btn:hover {
-  color: var(--genshin-blue);
-  box-shadow: var(--neu-extrude-md);
-}
-
 .title-area {
   position: absolute;
   left: 50%;
@@ -243,8 +212,8 @@ onMounted(async () => {
   background: none !important;
   -webkit-background-clip: unset !important;
   background-clip: unset !important;
-  -webkit-text-fill-color: #1a1a2e !important;
-  color: #1a1a2e;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  color: var(--text-primary);
 }
 
 /* 右侧状态 */
@@ -258,7 +227,7 @@ onMounted(async () => {
 
 .time-display {
   font-size: 12px;
-  color: #2c3e50;
+  color: var(--text-body);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.5px;
@@ -272,7 +241,7 @@ onMounted(async () => {
 .user-name {
   font-size: 12px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--text-body);
   max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -286,7 +255,7 @@ onMounted(async () => {
   cursor: pointer;
   font-size: 11px;
   color: var(--genshin-blue);
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
 }
 .logout-btn:hover {
   box-shadow: var(--neu-extrude-sm);
@@ -353,15 +322,8 @@ onMounted(async () => {
 }
 .weather-sep {
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
-.header-divider {
-  width: 1px;
-  height: 28px;
-  background: var(--neu-stroke-muted);
-  flex-shrink: 0;
-}
-
 /* 三栏主体 */
 .main-content {
   flex: 1;
@@ -394,10 +356,6 @@ onMounted(async () => {
   flex-shrink: 0;
   overflow: visible;
   transition: width 0.22s ease;
-}
-
-.main-content.rightchat-hidden .center-panel {
-  flex: 1;
 }
 
 .main-content.chat-wide .left-panel {

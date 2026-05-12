@@ -1,7 +1,7 @@
 <template>
-  <div class="pdf-page">
+  <div class="pdf-page" :class="{ embedded }">
     <header class="pdf-header neu-card">
-      <button class="back-btn" @click="$router.push('/')">
+      <button v-if="!embedded" class="back-btn" @click="goBackToWorkspace">
         <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
           <path d="M12 4l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
             stroke-linejoin="round" />
@@ -10,7 +10,7 @@
       </button>
       <div class="header-title">
         <span class="deco">◆</span>
-        <span class="genshin-title">PDF 检测报告智能提取 · 知识库管理</span>
+        <span class="genshin-title pdf-title-black">PDF 检测报告智能提取 · 知识库管理</span>
         <span class="deco">◆</span>
       </div>
       <span class="header-time">{{ currentTime }}</span>
@@ -18,6 +18,42 @@
 
     <div class="pdf-body u-scrollbar-hidden" ref="pdfBodyRef" :style="{ overflowY, overflowX }" @mouseenter="onEnter"
       @mouseleave="onLeave">
+      <section
+        v-if="ragCitation.active"
+        class="neu-card pdf-section citation-preview-wrap"
+      >
+        <div class="citation-preview-head">
+          <div class="cph-title">
+            <span class="cph-label">引用预览</span>
+            <span class="cph-name">{{ ragCitation.active.filename }}</span>
+            <span v-if="ragCitation.active.filepage > 0" class="cph-page"
+              >第 {{ ragCitation.active.filepage }} 页</span
+            >
+          </div>
+          <div class="cph-actions">
+            <button type="button" class="entry-btn" @click="openCitationInNewWindow">
+              新窗口打开
+            </button>
+            <button type="button" class="entry-btn" @click="ragCitation.clear()">
+              关闭预览
+            </button>
+          </div>
+        </div>
+        <p v-if="citationSnippet" class="citation-chunk-snippet">
+          {{ citationSnippet }}
+        </p>
+        <div class="citation-iframe-wrap">
+          <iframe
+            :key="citationViewerSrc"
+            class="citation-iframe"
+            title="引用文档预览"
+            :src="citationViewerSrc"
+          />
+        </div>
+        <p class="citation-iframe-hint">
+          若上方空白，可能是站点禁止嵌入浏览；请使用「新窗口打开」。
+        </p>
+      </section>
       <!-- 知识库列表 -->
       <section class="neu-card pdf-section">
         <div class="sec-title-row">
@@ -30,7 +66,7 @@
               数据录入
             </button>
             <button class="entry-btn" type="button" title="功能建设中">
-              数据导入
+              Excel导入
             </button>
           </div>
         </div>
@@ -240,11 +276,44 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useAdaptiveVerticalScroll } from "../composables/useAdaptiveVerticalScroll";
 import { useRouter } from "vue-router";
 import { useChatStore } from "../stores/chatStore";
+import { useCanvasStore } from "../stores/canvasStore";
+import {
+  useRagCitationStore,
+  buildPdfViewerSrc,
+} from "../stores/ragCitationStore";
 import { formatLocaleDateTimeClock } from "../utils/localeFormat";
 import defaultPdfImport from "../config/defaultPdfImport.json";
 
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+});
 const router = useRouter();
 const chatStore = useChatStore();
+const canvasStore = useCanvasStore();
+const ragCitation = useRagCitationStore();
+const embedded = computed(() => props.embedded);
+
+const citationViewerSrc = computed(() => {
+  const a = ragCitation.active;
+  if (!a) return "";
+  return buildPdfViewerSrc(a.fileurl, a.filepage);
+});
+
+const citationSnippet = computed(() => {
+  const t = ragCitation.active?.chunk_content ?? "";
+  if (!t) return "";
+  return t.length > 220 ? `${t.slice(0, 220)}…` : t;
+});
+
+function openCitationInNewWindow() {
+  const a = ragCitation.active;
+  if (!a) return;
+  window.open(
+    buildPdfViewerSrc(a.fileurl, a.filepage),
+    "_blank",
+    "noopener,noreferrer",
+  );
+}
 
 const pdfBodyRef = ref<HTMLElement | null>(null);
 const { overflowY, overflowX, onEnter, onLeave, remeasure, scrollToBottom } =
@@ -276,9 +345,9 @@ function tick() {
 
 // TODO: API - GET /api/kb/list
 const kbList = ref([
-  { id: 1, range: "2024年度", reports: 47, records: 247, knowledge: 89 },
-  { id: 2, range: "2023年度", reports: 38, records: 198, knowledge: 72 },
-  { id: 3, range: "2022年度", reports: 29, records: 156, knowledge: 58 },
+  { id: 1, range: "2025年度", reports: 47, records: 247, knowledge: 89 },
+  { id: 2, range: "2024年度", reports: 38, records: 198, knowledge: 72 },
+  { id: 3, range: "2023年度", reports: 29, records: 156, knowledge: 58 },
 ]);
 function toggleKbPick(kb: (typeof kbList.value)[0]) {
   chatStore.toggleKb({ id: String(kb.id), label: kb.range });
@@ -566,6 +635,14 @@ function animProg(from: number, to: number, dur: number) {
 
 function goAsk() {
   chatStore.addKb({ id: `upload-${Date.now()}`, label: rangeLabel.value });
+  const mapTab = canvasStore.tabs.find((t) => t.type === "map");
+  if (mapTab) canvasStore.setActiveTab(mapTab.id);
+  else canvasStore.pushTab({ type: "map" });
+  router.push("/workspace");
+}
+
+function goBackToWorkspace() {
+  canvasStore.setAgentMode("insight");
   router.push("/workspace");
 }
 
@@ -602,9 +679,19 @@ watch(
     if (len > (prev ?? 0)) scheduleScrollToNewBlock();
   },
 );
+
+watch(
+  () => ragCitation.active,
+  async () => {
+    await nextTick();
+    await remeasure();
+  },
+);
 </script>
 
 <style scoped>
+@import "./styles/pdf-header-kb.css";
+
 .pdf-page {
   display: flex;
   flex-direction: column;
@@ -616,223 +703,79 @@ watch(
   overflow: hidden;
 }
 
-.pdf-header {
-  display: flex;
-  align-items: center;
-  padding: 10px 20px;
-  gap: 16px;
+.pdf-page.embedded {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+}
+
+.citation-preview-wrap {
+  margin-bottom: 10px;
   flex-shrink: 0;
 }
-
-.back-btn {
+.citation-preview-head {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--neu-stroke-muted);
-  cursor: pointer;
-  background: var(--bg-color);
-  color: var(--genshin-blue);
-  font-size: 12px;
-  font-family: "Noto Sans SC", sans-serif;
-  box-shadow: var(--neu-extrude-sm);
-  transition: all 0.2s;
-}
-
-.header-title {
-  flex: 1;
-  text-align: center;
-  font-size: 16px;
-  letter-spacing: 3px;
-  color: #1a1a2e;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.deco {
-  color: var(--genshin-gold);
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-.header-time {
-  font-size: 12px;
-  color: var(--genshin-blue);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-.pdf-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 2px;
-}
-
-.pdf-section {
-  padding: 20px 24px;
-}
-
-.sec-title-row {
-  display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+  margin-bottom: 8px;
 }
-
-.sec-title {
-  font-family: "Noto Serif SC", serif;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--genshin-blue-dark);
-  margin-bottom: 16px;
-  border-left: 3px solid var(--genshin-gold);
-  padding-left: 10px;
-}
-
-.kb-pick-hint {
-  font-size: 11px;
-  font-weight: 500;
-  color: #8a9aac;
-  margin-left: 6px;
-}
-
-.sec-title-row .sec-title {
-  margin-bottom: 0;
-}
-
-.entry-actions {
+.cph-title {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
-
-.entry-btn {
-  border: 1px solid var(--neu-stroke-muted);
-  padding: 5px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  background: var(--bg-color);
-  color: var(--genshin-blue);
+.cph-label {
   font-size: 12px;
-  font-family: "Noto Sans SC", sans-serif;
-  box-shadow: var(--neu-extrude-sm);
-  transition: all 0.2s;
-}
-
-/* 知识库卡片 */
-.kb-list {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.kb-card {
-  padding: 16px 20px;
-  border-radius: 16px;
-  background: var(--bg-color);
-  box-shadow: var(--neu-extrude-lg);
-  transition: all 0.2s;
-  min-width: 160px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.kb-card:hover {
-  transform: translateY(-2px);
-}
-
-.kb-card.active {
-  box-shadow:
-    var(--neu-extrude-lg),
-    0 0 0 2px rgba(212, 168, 83, 0.45);
-}
-
-.kb-year {
-  font-family: "Noto Serif SC", serif;
-  font-size: 16px;
   font-weight: 700;
-  color: var(--genshin-blue-dark);
+  color: var(--genshin-blue);
 }
-
-.kb-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.cph-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.cph-page {
   font-size: 11px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
-
-.kb-badge {
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.kb-on {
-  color: #5cad8a;
-}
-
-.kb-off {
-  color: #b0bac8;
-}
-
-.kb-btns {
+.cph-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
-
-.kb-btn {
-  padding: 3px 10px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
+.citation-chunk-snippet {
+  margin: 0 0 8px;
   font-size: 11px;
-  font-family: "Noto Sans SC", sans-serif;
-  transition: all 0.2s;
+  line-height: 1.45;
+  color: var(--text-muted);
+  max-height: 4.5em;
+  overflow: auto;
 }
-
-.kb-btn.activate {
-  background: rgba(74, 141, 183, 0.1);
-  color: var(--genshin-blue);
+.citation-iframe-wrap {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(74, 141, 183, 0.2);
+  background: var(--bg-groove);
+  min-height: 280px;
 }
-
-.kb-btn.del {
-  background: rgba(224, 112, 112, 0.1);
-  color: #e07070;
+.citation-iframe {
+  display: block;
+  width: 100%;
+  height: min(52vh, 420px);
+  min-height: 260px;
+  border: none;
 }
-
-.add-kb {
-  border: 2px dashed var(--neu-stroke-muted-strong);
-  background: transparent !important;
-  align-items: center;
-  justify-content: center;
-  min-height: 120px;
-  box-shadow: none !important;
-  cursor: pointer;
+.citation-iframe-hint {
+  margin: 6px 0 0;
+  font-size: 10px;
+  color: var(--text-muted);
 }
-
-.add-kb:hover {
-  border-color: var(--genshin-blue);
-}
-
-.add-plus {
-  font-size: 24px;
-  color: #b0bac8;
-}
-
-.add-text {
-  font-size: 12px;
-  color: #b0bac8;
-}
-
 /* 上传区 */
 .time-row {
   display: flex;
@@ -853,7 +796,7 @@ watch(
   border-radius: 8px;
   border: none;
   font-size: 12px;
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
   color: var(--genshin-blue-dark);
   cursor: pointer;
   outline: none;
@@ -871,7 +814,7 @@ watch(
   background: rgba(74, 141, 183, 0.08);
   color: var(--genshin-blue);
   font-size: 12px;
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
   cursor: pointer;
 }
 
@@ -907,7 +850,7 @@ watch(
 
 .dz-sub {
   font-size: 12px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
 
 .file-list-wrap {
@@ -1043,7 +986,7 @@ watch(
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  color: #8a9aac;
+  color: var(--text-muted);
   background: rgba(163, 177, 198, 0.2);
   transition:
     color 0.15s,
@@ -1074,7 +1017,7 @@ watch(
   border: none;
   cursor: pointer;
   font-size: 14px;
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
   background: linear-gradient(135deg,
       var(--genshin-blue),
       var(--genshin-blue-light));
@@ -1133,7 +1076,7 @@ watch(
   justify-content: center;
   font-size: 15px;
   font-weight: 700;
-  color: #b0bac8;
+  color: var(--text-faint);
   background: var(--bg-color);
   box-shadow: var(--neu-extrude-md);
   transition: all 0.35s;
@@ -1183,12 +1126,12 @@ watch(
 
 .flow-desc {
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
   line-height: 1.4;
 }
 
 .flow-arrow {
-  color: #b0bac8;
+  color: var(--text-faint);
   padding: 0 4px;
   transition: color 0.3s;
 }
@@ -1206,7 +1149,7 @@ watch(
 
 .prog-label {
   font-size: 12px;
-  color: #8a9aac;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
@@ -1262,7 +1205,7 @@ watch(
 
 .done-sub {
   font-size: 12px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
 
 .done-sub strong {
@@ -1277,7 +1220,7 @@ watch(
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
   letter-spacing: 0.03em;
   background: linear-gradient(135deg,
       var(--genshin-blue),
@@ -1332,7 +1275,7 @@ watch(
 /* 导入数据展示 */
 .mock-source {
   font-size: 12px;
-  color: #8a9aac;
+  color: var(--text-muted);
   margin-bottom: 12px;
 }
 
@@ -1349,7 +1292,7 @@ watch(
 
 .si-label {
   font-size: 11px;
-  color: #8a9aac;
+  color: var(--text-muted);
   margin-bottom: 6px;
 }
 
@@ -1382,7 +1325,7 @@ watch(
 .mbr-label {
   width: 88px;
   font-size: 12px;
-  color: #5a6a7c;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -1406,7 +1349,7 @@ watch(
   width: 40px;
   text-align: right;
   font-size: 12px;
-  color: #5a6a7c;
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 

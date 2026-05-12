@@ -103,6 +103,13 @@ export const useUiStore = defineStore('ui', () => {
     scrollToMessageId.value = null
   }
 
+  /** 工作台收缩右侧对话加宽栏（Workspace 监听后设 chatWide=false） */
+  const collapseChatWideSignal = ref(0)
+
+  function requestCollapseWorkspaceChatWide() {
+    collapseChatWideSignal.value += 1
+  }
+
   return {
     assistantVisibility,
     chartSectionExpanded,
@@ -116,5 +123,7 @@ export const useUiStore = defineStore('ui', () => {
     scrollToMessageId,
     requestScrollToMessage,
     clearScrollRequest,
+    collapseChatWideSignal,
+    requestCollapseWorkspaceChatWide,
   }
 })

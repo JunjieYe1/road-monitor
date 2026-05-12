@@ -20,72 +20,6 @@
           >
         </button>
       </div>
-      <!-- 智能体模式 + 视图选择面板 -->
-      <div class="tab-add-wrap" @click.stop>
-        <button
-          class="tab-add-btn"
-          :class="{ open: showAddMenu }"
-          @click="showAddMenu = !showAddMenu"
-          title="切换模式 / 打开视图"
-        >
-          <svg viewBox="0 0 18 18" fill="none" width="14" height="14">
-            <circle
-              cx="9"
-              cy="9"
-              r="7.5"
-              stroke="currentColor"
-              stroke-width="1.4"
-            />
-            <path
-              d="M9 5.5v7M5.5 9h7"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
-        <transition name="menu-pop">
-          <div v-if="showAddMenu" class="add-menu neu-card">
-            <!-- 智能体模式 -->
-            <div class="menu-section-title">智能体模式</div>
-            <div class="mode-grid">
-              <button
-                v-for="m in agentModes"
-                :key="m.key"
-                class="mode-grid-item"
-                :class="{ active: canvasStore.agentMode === m.key }"
-                @click="switchMode(m.key)"
-              >
-                <span class="mgi-icon">{{ m.icon }}</span>
-                <span class="mgi-label">{{ m.label }}</span>
-              </button>
-            </div>
-            <div class="menu-divider"></div>
-            <!-- 画布视图 -->
-            <div class="menu-section-title">打开视图</div>
-            <div class="view-grid">
-              <button
-                v-for="key in viewMenuOrder"
-                :key="key"
-                class="view-grid-item"
-                :class="{
-                  opened: isOpened(key),
-                  disabled: isViewOpenDisabled(key) && !isOpened(key),
-                }"
-                :disabled="isViewOpenDisabled(key) && !isOpened(key)"
-                @click="openView(key)"
-              >
-                <span class="vgi-icon">{{ availableViews[key].icon }}</span>
-                <span class="vgi-title">{{ availableViews[key].title }}</span>
-                <span v-if="isOpened(key)" class="vgi-badge">已开</span>
-                <span v-else-if="isViewOpenDisabled(key)" class="vgi-badge muted"
-                  >暂不可用</span
-                >
-              </button>
-            </div>
-          </div>
-        </transition>
-      </div>
     </div>
 
     <!-- 视图内容区 -->
@@ -103,15 +37,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { computed } from "vue";
 import {
   useCanvasStore,
-  isViewOpenDisabled,
   type CanvasViewType,
-  type AgentMode,
 } from "../../stores/canvasStore";
 import MapView from "./views/MapView.vue";
+import PdfPage from "../../views/PdfPage.vue";
 import ReportView from "./views/ReportView.vue";
 import ComplianceView from "./views/ComplianceView.vue";
 import WorkOrderView from "./views/WorkOrderView.vue";
@@ -120,11 +52,10 @@ import RiskView from "./views/RiskView.vue";
 import AssessView from "./views/AssessView.vue";
 
 const canvasStore = useCanvasStore();
-const router = useRouter();
-const showAddMenu = ref(false);
 
 const VIEW_COMPONENTS: Record<CanvasViewType, any> = {
   map: MapView,
+  collect: PdfPage,
   report: ReportView,
   compliance: ComplianceView,
   workorder: WorkOrderView,
@@ -133,52 +64,10 @@ const VIEW_COMPONENTS: Record<CanvasViewType, any> = {
   assess: AssessView,
 };
 
-const agentModes = [
-  { key: "insight" as AgentMode, label: "全景洞察", icon: "🌐" },
-  { key: "collect" as AgentMode, label: "数据入仓", icon: "📋" },
-  { key: "operations" as AgentMode, label: "运营管理", icon: "⚙️" },
-  { key: "predict" as AgentMode, label: "隐患预判", icon: "⚠️" },
-];
-
 const activeTab = computed(() => canvasStore.getActiveTab());
 const activeViewComponent = computed(() => {
   const tab = activeTab.value;
   return tab ? VIEW_COMPONENTS[tab.type] : MapView;
-});
-
-const availableViews = computed(() => canvasStore.VIEW_META);
-const viewMenuOrder: CanvasViewType[] = [
-  "map",
-  "report",
-  "compliance",
-  "workorder",
-  "risk",
-  "plan",
-  "assess",
-];
-const isOpened = (type: CanvasViewType) =>
-  canvasStore.tabs.some((t) => t.type === type);
-
-function switchMode(key: AgentMode) {
-  if (key === "collect") {
-    showAddMenu.value = false;
-    router.push("/pdf");
-    return;
-  }
-  canvasStore.setAgentMode(key);
-  showAddMenu.value = false;
-}
-
-function openView(type: CanvasViewType) {
-  if (isViewOpenDisabled(type) && !isOpened(type)) return;
-  canvasStore.pushTab({ type });
-  showAddMenu.value = false;
-}
-
-onMounted(() => {
-  document.addEventListener("click", () => {
-    showAddMenu.value = false;
-  });
 });
 </script>
 
@@ -267,174 +156,6 @@ onMounted(() => {
 .tab-close:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.2);
-}
-
-/* ── 添加 / 模式切换按钮 ── */
-.tab-add-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.tab-add-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  border: 1px solid var(--neu-stroke-heavy);
-  background: var(--bg-color);
-  color: #6a7a8c;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  box-shadow: var(--neu-extrude-sm);
-}
-.tab-add-btn:hover,
-.tab-add-btn.open {
-  color: var(--genshin-blue);
-  border-color: var(--genshin-blue);
-  box-shadow:
-    0 0 0 3px rgba(74, 141, 183, 0.12),
-    var(--neu-extrude-sm);
-}
-
-/* 弹出面板 */
-.add-menu {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  z-index: 200;
-  padding: 14px;
-  min-width: 260px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.menu-section-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: #8a9aac;
-  text-transform: uppercase;
-  padding: 0 2px;
-}
-.menu-divider {
-  height: 1px;
-  background: var(--neu-stroke-faint);
-  margin: 2px 0;
-}
-
-/* 模式 2×2 网格 */
-.mode-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-}
-.mode-grid-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  background: var(--bg-color);
-  font-size: 12px;
-  font-family: "Noto Sans SC", sans-serif;
-  color: #5a6a7c;
-  box-shadow: var(--neu-extrude-sm);
-  transition: all 0.18s;
-}
-.mode-grid-item:hover {
-  color: var(--genshin-blue);
-  border-color: rgba(74, 141, 183, 0.25);
-}
-.mode-grid-item.active {
-  background: linear-gradient(
-    135deg,
-    var(--genshin-blue),
-    var(--genshin-blue-light)
-  );
-  color: #fff;
-  border-color: transparent;
-  box-shadow: var(--neu-glow-blue-strong);
-}
-.mgi-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-.mgi-label {
-  font-size: 11px;
-  font-weight: 500;
-}
-
-/* 视图列表 */
-.view-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.view-grid-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: "Noto Sans SC", sans-serif;
-  color: var(--genshin-blue-dark);
-  transition: background 0.15s;
-  width: 100%;
-}
-.view-grid-item:hover {
-  background: rgba(74, 141, 183, 0.08);
-}
-.view-grid-item.opened {
-  color: #8a9aac;
-}
-.view-grid-item.disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.view-grid-item.disabled .vgi-icon {
-  filter: grayscale(1);
-  opacity: 0.85;
-}
-.view-grid-item.disabled:hover {
-  background: none;
-}
-.vgi-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-.vgi-title {
-  flex: 1;
-  text-align: left;
-}
-.vgi-badge {
-  font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: rgba(74, 141, 183, 0.1);
-  color: var(--genshin-blue);
-}
-.vgi-badge.muted {
-  background: rgba(138, 154, 172, 0.12);
-  color: #8a9aac;
-}
-
-.menu-pop-enter-active,
-.menu-pop-leave-active {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.menu-pop-enter-from,
-.menu-pop-leave-to {
-  opacity: 0;
-  transform: translateY(-8px) scale(0.96);
 }
 
 /* ── 视图内容区 ── */

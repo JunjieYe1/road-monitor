@@ -1,0 +1,89 @@
+:root {
+  --neu-angle: 145deg;
+
+  --bg-page: #c8cdd8;
+  --bg-groove: #d4d9e2;
+  --bg-color: #e8edf2;
+  --bg-light: #f0f4f8;
+
+  --neu-convex-from: var(--bg-light);
+  --neu-convex-mid: var(--bg-color);
+  --neu-convex-to: #dde2ea;
+
+  --neu-concave-from: #d2d7e0;
+  --neu-concave-to: var(--bg-color);
+
+  --neu-groove-from: #cdd2dc;
+  --neu-groove-to: var(--bg-groove);
+
+  --shadow-dark: rgba(140, 155, 180, 0.7);
+  --shadow-light: rgba(255, 255, 255, 0.72);
+  --neu-border-highlight: rgba(255, 255, 255, 0.6);
+
+  --neu-extrude-xs: 2px 2px 4px var(--shadow-dark), -2px -2px 4px var(--shadow-light);
+  --neu-extrude-sm: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
+  --neu-extrude-sm-deep: 2px 2px 8px var(--shadow-dark), -2px -2px 8px var(--shadow-light);
+  --neu-extrude-back: 2px 2px 6px var(--shadow-dark), -2px -2px 6px var(--shadow-light);
+  --neu-extrude-md: 3px 3px 8px var(--shadow-dark), -3px -3px 8px var(--shadow-light);
+  --neu-extrude-chip: 3px 3px 7px var(--shadow-dark), -3px -3px 7px var(--shadow-light);
+  --neu-extrude-lg: 4px 4px 10px var(--shadow-dark), -4px -4px 10px var(--shadow-light);
+  --neu-extrude-lg-soft: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+  --neu-extrude-lg-up: 6px 6px 14px var(--shadow-dark), -6px -6px 14px var(--shadow-light);
+  --neu-extrude-xl: 6px 6px 16px var(--shadow-dark), -6px -6px 16px var(--shadow-light);
+  --neu-extrude-xxl: 8px 8px 20px var(--shadow-dark), -8px -8px 20px var(--shadow-light);
+  --neu-extrude-card: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+  --neu-extrude-card-sm: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+  --neu-extrude-btn: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
+  --neu-extrude-btn-hover: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+
+  --neu-inset-ctl: inset 4px 4px 9px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+  --neu-inset-groove: inset 3px 3px 8px var(--shadow-dark), inset -2px -2px 6px rgba(255, 255, 255, 0.48);
+  --neu-inset-shallow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+  --neu-inset-sm: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
+  --neu-inset-track: inset 1px 1px 3px var(--shadow-dark);
+  --neu-inset-track-lg: inset 2px 2px 4px var(--shadow-dark);
+  --neu-inset-track-sm: var(--neu-inset-track);
+
+  --neu-stroke-muted: rgba(163, 177, 198, 0.35);
+  --neu-stroke-muted-strong: rgba(163, 177, 198, 0.4);
+  --neu-stroke-heavy: rgba(163, 177, 198, 0.45);
+  --neu-stroke-faint: rgba(163, 177, 198, 0.3);
+
+  --neu-glow-blue: 2px 3px 10px rgba(45, 90, 123, 0.28);
+  --neu-glow-blue-soft: 2px 3px 10px rgba(45, 90, 123, 0.25);
+  --neu-glow-blue-strong: 2px 3px 10px rgba(45, 90, 123, 0.3);
+  --neu-glow-blue-deep: 2px 3px 10px rgba(45, 90, 123, 0.35);
+  --neu-glow-blue-hover: 3px 5px 14px rgba(45, 90, 123, 0.35);
+  --neu-glow-blue-lift: 3px 5px 14px rgba(45, 90, 123, 0.28);
+  --neu-glow-blue-hover-strong: 3px 5px 14px rgba(45, 90, 123, 0.4);
+  --neu-glow-success: 2px 3px 10px rgba(92, 173, 138, 0.28);
+  --neu-glow-success-soft: 2px 3px 10px rgba(92, 173, 138, 0.25);
+  --neu-glow-success-strong: 2px 3px 10px rgba(92, 173, 138, 0.3);
+  --neu-glow-success-hover: 3px 5px 14px rgba(92, 173, 138, 0.28);
+  --neu-glow-gold: 2px 3px 10px rgba(212, 168, 83, 0.3);
+  --neu-glow-gold-frame: 0 3px 10px rgba(212, 168, 83, 0.4);
+  --neu-glow-danger: 2px 3px 10px rgba(224, 112, 112, 0.25);
+  --neu-glow-analyze: 2px 3px 12px rgba(45, 90, 123, 0.3);
+
+  --font-ui: "Noto Sans SC", sans-serif;
+  --font-display: "Noto Serif SC", serif;
+
+  --genshin-gold: #d4a853;
+  --genshin-gold-light: #f0d78c;
+  --genshin-gold-dark: #b8923f;
+  --genshin-blue: #2d5a7b;
+  --genshin-blue-light: #4a8db7;
+  --genshin-blue-dark: #1a3a52;
+  --genshin-accent: #c4956a;
+
+  --danger: #e07070;
+  --warning: #e0a050;
+  --success: #5cad8a;
+  --info: #5a8fd0;
+
+  --text-primary: #1a1a2e;
+  --text-body: #2c3e50;
+  --text-secondary: #5a6a7c;
+  --text-muted: #8a9aac;
+  --text-faint: #b0bac8;
+}

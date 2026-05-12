@@ -9,9 +9,40 @@ export interface MapControlItem {
   latitude: number
 }
 
+/** `map_control` 中按病害类别的聚合（与后端字段对齐） */
+export interface MapControlDiseaseProportion {
+  disease_category: string
+  proportion: number
+  disease_count: number
+}
+
 export interface MapControlPayload {
   count: number
   items: MapControlItem[]
+  disease_proportion?: MapControlDiseaseProportion[]
+}
+
+/** SSE `rag_control` 单条知识库引用 */
+export interface RagControlItem {
+  filename: string
+  chunk_content: string
+  filepage: number
+  fileurl: string
+}
+
+function parseDiseaseProportion(raw: unknown): MapControlDiseaseProportion[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const out: MapControlDiseaseProportion[] = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const r = row as Record<string, unknown>
+    const cat = String(r.disease_category ?? '')
+    const prop = Number(r.proportion)
+    const cnt = Number(r.disease_count)
+    if (!cat || !Number.isFinite(prop) || !Number.isFinite(cnt)) continue
+    out.push({ disease_category: cat, proportion: prop, disease_count: cnt })
+  }
+  return out.length ? out : undefined
 }
 
 function parseMapControlPayload(raw: unknown): MapControlPayload | null {
@@ -36,7 +67,25 @@ function parseMapControlPayload(raw: unknown): MapControlPayload | null {
   }
   const count =
     typeof o.count === 'number' && Number.isFinite(o.count) ? o.count : items.length
-  return { count, items }
+  const disease_proportion = parseDiseaseProportion(o.disease_proportion)
+  return { count, items, ...(disease_proportion ? { disease_proportion } : {}) }
+}
+
+function parseRagControlData(raw: unknown): RagControlItem[] {
+  if (!Array.isArray(raw)) return []
+  const out: RagControlItem[] = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const r = row as Record<string, unknown>
+    const filepage = Number(r.filepage)
+    out.push({
+      filename: String(r.filename ?? ''),
+      chunk_content: String(r.chunk_content ?? ''),
+      filepage: Number.isFinite(filepage) ? filepage : 0,
+      fileurl: String(r.fileurl ?? ''),
+    })
+  }
+  return out
 }
 
 export type ChatStreamEvent =
@@ -45,6 +94,7 @@ export type ChatStreamEvent =
   | { kind: 'deepthought'; content: string }
   | { kind: 'title'; content: string }
   | { kind: 'map_control'; data: MapControlPayload }
+  | { kind: 'rag_control'; data: RagControlItem[] }
   | { kind: 'done'; message_id?: string; group_id?: number }
   | { kind: 'error'; message: string; traceback?: string; message_id?: string; group_id?: number }
 
@@ -82,6 +132,9 @@ function parseSseDataLine(line: string, onEvent: (e: ChatStreamEvent) => void) {
     else if (t === 'map_control') {
       const parsed = parseMapControlPayload(data.data)
       if (parsed) onEvent({ kind: 'map_control', data: parsed })
+    } else if (t === 'rag_control') {
+      const items = parseRagControlData(data.data)
+      if (items.length) onEvent({ kind: 'rag_control', data: items })
     }
   } catch {
     /* 忽略损坏行 */

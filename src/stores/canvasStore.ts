@@ -3,6 +3,7 @@ import { ref } from "vue";
 
 export type CanvasViewType =
   | "map"
+  | "collect"
   | "report"
   | "compliance"
   | "workorder"
@@ -22,6 +23,7 @@ export interface CanvasTab {
 
 const VIEW_META: Record<CanvasViewType, { title: string; icon: string }> = {
   map: { title: "智能地图", icon: "🗺️" },
+  collect: { title: "数据入仓", icon: "📋" },
   report: { title: "报告生成", icon: "📄" },
   compliance: { title: "履约画像", icon: "🏆" },
   workorder: { title: "病害工单", icon: "🔧" },
@@ -36,17 +38,61 @@ export function isViewOpenDisabled(type: CanvasViewType): boolean {
 }
 
 export const useCanvasStore = defineStore("canvas", () => {
+  /** 下一次 activeTabId 变化时跳过 Workspace 内「切页清空对话」逻辑（如打开 RAG 引用切到数据入仓） */
+  const skipChatResetOnNextTabChange = ref(false);
+
   const tabs = ref<CanvasTab[]>([
     { id: "map", type: "map", title: "智能地图", icon: "🗺️", closable: false },
+    {
+      id: "collect",
+      type: "collect",
+      title: "数据入仓",
+      icon: "📋",
+      closable: false,
+      props: { embedded: true },
+    },
+    {
+      id: "report",
+      type: "report",
+      title: "报告生成",
+      icon: "📄",
+      closable: false,
+    },
+    {
+      id: "compliance",
+      type: "compliance",
+      title: "履约画像",
+      icon: "🏆",
+      closable: false,
+    },
+    {
+      id: "workorder",
+      type: "workorder",
+      title: "病害工单",
+      icon: "🔧",
+      closable: false,
+    },
+    { id: "risk", type: "risk", title: "风险预测", icon: "⚠️", closable: false },
   ]);
   const activeTabId = ref<string>("map");
   const agentMode = ref<AgentMode>("insight");
 
   const agentModeDefaults: Record<AgentMode, CanvasViewType> = {
     insight: "map",
-    collect: "map",
+    collect: "collect",
     operations: "workorder",
     predict: "risk",
+  };
+
+  const viewModeMap: Record<CanvasViewType, AgentMode> = {
+    map: "insight",
+    collect: "collect",
+    report: "insight",
+    compliance: "insight",
+    workorder: "operations",
+    plan: "operations",
+    risk: "predict",
+    assess: "predict",
   };
 
   function setAgentMode(mode: AgentMode) {
@@ -68,7 +114,10 @@ export const useCanvasStore = defineStore("canvas", () => {
     const meta = VIEW_META[opts.type];
     const existing = tabs.value.find((t) => t.type === opts.type);
     if (existing) {
-      activeTabId.value = existing.id;
+      if (opts.props && Object.keys(opts.props).length) {
+        existing.props = { ...existing.props, ...opts.props };
+      }
+      setActiveTab(existing.id);
       return;
     }
     if (isViewOpenDisabled(opts.type)) return;
@@ -79,9 +128,9 @@ export const useCanvasStore = defineStore("canvas", () => {
       title: opts.title ?? meta.title,
       icon: meta.icon,
       closable: true,
-      props: opts.props,
+      props: opts.props ?? (opts.type === "collect" ? { embedded: true } : undefined),
     });
-    activeTabId.value = id;
+    setActiveTab(id);
   }
 
   function closeTab(id: string) {
@@ -95,10 +144,36 @@ export const useCanvasStore = defineStore("canvas", () => {
 
   function setActiveTab(id: string) {
     activeTabId.value = id;
+    const tab = tabs.value.find((t) => t.id === id);
+    if (!tab) return;
+    agentMode.value = viewModeMap[tab.type];
   }
 
   function getActiveTab(): CanvasTab | undefined {
     return tabs.value.find((t) => t.id === activeTabId.value);
+  }
+
+  function mergeTabProps(tabId: string, partial: Record<string, unknown>) {
+    const t = tabs.value.find((x) => x.id === tabId);
+    if (!t) return;
+    t.props = { ...t.props, ...partial };
+  }
+
+  function requestSkipChatResetOnNextTabChange() {
+    skipChatResetOnNextTabChange.value = true;
+  }
+
+  function consumeSkipChatResetOnNextTabChange(): boolean {
+    if (!skipChatResetOnNextTabChange.value) return false;
+    skipChatResetOnNextTabChange.value = false;
+    return true;
+  }
+
+  /** 切到「数据入仓」且不触发工作台清空对话 */
+  function focusCollectTabForCitation() {
+    requestSkipChatResetOnNextTabChange();
+    const tab = tabs.value.find((t) => t.type === "collect");
+    if (tab) setActiveTab(tab.id);
   }
 
   return {
@@ -110,6 +185,10 @@ export const useCanvasStore = defineStore("canvas", () => {
     closeTab,
     setActiveTab,
     getActiveTab,
+    mergeTabProps,
+    requestSkipChatResetOnNextTabChange,
+    consumeSkipChatResetOnNextTabChange,
+    focusCollectTabForCitation,
     VIEW_META,
   };
 });

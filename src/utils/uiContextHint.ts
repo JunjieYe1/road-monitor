@@ -17,6 +17,7 @@ const AGENT_MODES = new Set<AgentMode>([
 
 const CANVAS_TABS = new Set<CanvasViewType>([
   'map',
+  'collect',
   'report',
   'compliance',
   'workorder',

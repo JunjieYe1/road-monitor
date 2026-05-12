@@ -1,6 +1,9 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import type { MapControlPayload } from "../api/chatStream";
+import type {
+  MapControlDiseaseProportion,
+  MapControlPayload,
+} from "../api/chatStream";
 import { defectCategoryColor } from "../utils/labels";
 import { formatLocaleTimeHm } from "../utils/localeFormat";
 import { diseaseLevelToSeverity } from "../utils/severity";
@@ -37,6 +40,8 @@ export interface MapControlDebugSnapshot {
   computedSeverity: SeveritySummary;
   sampleLevels: string[];
   timestamp: string;
+  /** 后端 `map_control.disease_proportion`，供调试或图表使用 */
+  diseaseProportion?: MapControlDiseaseProportion[];
 }
 
 const SEV = new Set<AlertPoint["severity"]>(["high", "medium", "low"]);
@@ -110,6 +115,13 @@ function parseAlertPointArray(data: unknown): AlertPoint[] {
 
 function cloneAlerts(rows: AlertPoint[]): AlertPoint[] {
   return rows.map((row) => ({ ...row }));
+}
+
+function extractYearFromTime(timeText: string): number | null {
+  const m = timeText.match(/(20\d{2})/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  return Number.isFinite(y) ? y : null;
 }
 
 const FALLBACK_ALERTS: AlertPoint[] = [
@@ -261,9 +273,12 @@ const FALLBACK_ALERTS: AlertPoint[] = [
 
 export const useAlertStore = defineStore("alert", () => {
   const alerts = ref<AlertPoint[]>([...FALLBACK_ALERTS]);
+  const baseAlerts = ref<AlertPoint[]>(cloneAlerts(FALLBACK_ALERTS));
   const alertsLoadedFrom = ref<"fallback" | "recheck">("fallback");
   const hasLoadedBaseAlerts = ref(false);
   const selectedAlert = ref<AlertPoint | null>(null);
+  const selectedYear = ref<number>(2025);
+  const selectedDistrict = ref<string>("上城区");
 
   const mapControlCount = ref<number | null>(null);
   const mapControlSeveritySummary = ref<SeveritySummary | null>(null);
@@ -271,7 +286,28 @@ export const useAlertStore = defineStore("alert", () => {
   const mapControlSnapshot = ref<AlertPoint[] | null>(null);
   let mapControlSeed = 1;
 
-  const totalCount = computed(() => mapControlCount.value ?? alerts.value.length);
+  const filteredAlerts = computed<AlertPoint[]>(() => {
+    if (mapControlSnapshot.value) return alerts.value;
+    const year = selectedYear.value;
+    const district = selectedDistrict.value;
+    return alerts.value.filter((a) => {
+      const parsedYear = extractYearFromTime(a.time);
+      const yearMatched = parsedYear === null ? true : parsedYear === year;
+      const districtMatched = district === "全部" ? true : a.district === district;
+      return yearMatched && districtMatched;
+    });
+  });
+
+  const districtOptions = computed<string[]>(() => {
+    const uniq = new Set(alerts.value.map((a) => a.district).filter(Boolean));
+    const ordered = [...uniq].sort((a, b) => a.localeCompare(b, "zh-CN"));
+    const withAll = ["全部", ...ordered.filter((d) => d !== "上城区")];
+    return ["上城区", ...withAll.filter((d) => d !== "上城区")];
+  });
+
+  const totalCount = computed(() =>
+    mapControlCount.value ?? filteredAlerts.value.length,
+  );
 
   function setMapControlCount(count: number | null) {
     mapControlCount.value = count;
@@ -308,6 +344,9 @@ export const useAlertStore = defineStore("alert", () => {
       computedSeverity: { ...severityCounter },
       sampleLevels: payload.items.slice(0, 3).map((item) => item.disease_level),
       timestamp: new Date().toISOString(),
+      ...(payload.disease_proportion?.length
+        ? { diseaseProportion: [...payload.disease_proportion] }
+        : {}),
     };
     selectedAlert.value = null;
   }
@@ -332,13 +371,14 @@ export const useAlertStore = defineStore("alert", () => {
       computedSeverity: { ...prevSeverity },
       sampleLevels: [],
       timestamp: new Date().toISOString(),
+      diseaseProportion: undefined,
     };
     selectedAlert.value = null;
   }
 
   const typeDistribution = computed(() => {
     const map: Record<string, number> = {};
-    alerts.value.forEach((a) => {
+    filteredAlerts.value.forEach((a) => {
       map[a.type] = (map[a.type] || 0) + 1;
     });
     return Object.entries(map)
@@ -351,17 +391,19 @@ export const useAlertStore = defineStore("alert", () => {
   });
 
   const statusSummary = computed(() => ({
-    pending: alerts.value.filter((a) => a.status === "pending").length,
-    processing: alerts.value.filter((a) => a.status === "processing").length,
-    completed: alerts.value.filter((a) => a.status === "completed").length,
+    pending: filteredAlerts.value.filter((a) => a.status === "pending").length,
+    processing: filteredAlerts.value.filter((a) => a.status === "processing").length,
+    completed: filteredAlerts.value.filter((a) => a.status === "completed").length,
   }));
 
   const severitySummary = computed<SeveritySummary>(() => {
-    if (mapControlSeveritySummary.value) return mapControlSeveritySummary.value;
+    if (mapControlSnapshot.value && mapControlSeveritySummary.value) {
+      return mapControlSeveritySummary.value;
+    }
     return {
-      high: alerts.value.filter((a) => a.severity === "high").length,
-      medium: alerts.value.filter((a) => a.severity === "medium").length,
-      low: alerts.value.filter((a) => a.severity === "low").length,
+      high: filteredAlerts.value.filter((a) => a.severity === "high").length,
+      medium: filteredAlerts.value.filter((a) => a.severity === "medium").length,
+      low: filteredAlerts.value.filter((a) => a.severity === "low").length,
     };
   });
 
@@ -371,6 +413,8 @@ export const useAlertStore = defineStore("alert", () => {
 
   async function loadRecheckAlerts(): Promise<void> {
     if (!shouldLoadRecheckAlerts()) {
+      baseAlerts.value = cloneAlerts(FALLBACK_ALERTS);
+      alerts.value = cloneAlerts(FALLBACK_ALERTS);
       hasLoadedBaseAlerts.value = true;
       return;
     }
@@ -381,10 +425,12 @@ export const useAlertStore = defineStore("alert", () => {
       const json: unknown = await res.json();
       const parsed = parseAlertPointArray(json);
       if (parsed.length === 0) throw new Error("empty or invalid payload");
-      alerts.value = parsed;
+      baseAlerts.value = cloneAlerts(parsed);
+      alerts.value = cloneAlerts(parsed);
       alertsLoadedFrom.value = "recheck";
     } catch {
-      alerts.value = [...FALLBACK_ALERTS];
+      baseAlerts.value = cloneAlerts(FALLBACK_ALERTS);
+      alerts.value = cloneAlerts(FALLBACK_ALERTS);
       alertsLoadedFrom.value = "fallback";
     } finally {
       hasLoadedBaseAlerts.value = true;
@@ -393,9 +439,14 @@ export const useAlertStore = defineStore("alert", () => {
 
   return {
     alerts,
+    baseAlerts,
+    filteredAlerts,
     alertsLoadedFrom,
     hasLoadedBaseAlerts,
     selectedAlert,
+    selectedYear,
+    selectedDistrict,
+    districtOptions,
     totalCount,
     typeDistribution,
     statusSummary,

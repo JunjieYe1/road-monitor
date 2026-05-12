@@ -1,5 +1,4 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import HomePage from '../views/HomePage.vue'
 import WorkspacePage from '../views/WorkspacePage.vue'
 import PdfPage from '../views/PdfPage.vue'
 import LoginPage from '../views/LoginPage.vue'
@@ -8,7 +7,7 @@ import { useAuthStore } from '../stores/authStore'
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/', name: 'home', component: HomePage },
+    { path: '/', name: 'home', component: WorkspacePage, meta: { requiresAuth: true } },
     { path: '/login', name: 'login', component: LoginPage, meta: { transition: 'fade' } },
     {
       path: '/workspace/defect/:id',

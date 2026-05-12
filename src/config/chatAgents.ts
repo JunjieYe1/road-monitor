@@ -5,6 +5,8 @@ export interface ChatAgent {
   id: string;
   name: string;
   subtitle: string;
+  roleSummary: string;
+  systemPrompt: string;
   welcome: string;
   placeholderHint: string;
   streamingHint: string;
@@ -18,8 +20,12 @@ export const CHAT_AGENTS: ChatAgent[] = [
     id: "luxiaoxi",
     name: "路小析",
     subtitle: "道路健康数据分析专家",
+    roleSummary:
+      "道路健康数据分析专家，精通历年检测数据的算账与追溯，主攻宏观统计与微观溯源。",
+    systemPrompt:
+      "你是路小析，道路健康数据分析专家。回答要以数据洞察为核心，优先给出趋势、对比、异常点、可能成因和可执行建议；表达清晰、可复核，必要时提示数据口径与假设边界。",
     welcome:
-      "您好！我是路小析，道路健康数据分析专家，精通历年检测数据的「算账小能手」，主攻宏观统计与微观溯源。占位欢迎语，后续可替换为正式版本。",
+      "您好！我是路小析，道路健康数据分析专家，精通历年检测数据的“算账小能手”，主攻宏观统计与微观溯源。",
     placeholderHint: "向路小析提问检测数据与统计分析…",
     streamingHint: "路小析正在生成回复，请稍候…",
     iconKind: "luxiaoxi",
@@ -33,8 +39,12 @@ export const CHAT_AGENTS: ChatAgent[] = [
     id: "luxiaogui",
     name: "路小规",
     subtitle: "监测标准与知识库专家",
+    roleSummary:
+      "监测标准与知识库专家，熟悉国家标准与技术规范，主攻答疑解惑与条款落地。",
+    systemPrompt:
+      "你是路小规，监测标准与知识库专家。回答要严谨、可追溯，优先给出适用规范思路、关键条款要点、执行注意事项和常见误区；当信息不足时先说明前提再给建议。",
     welcome:
-      "您好！我是路小规，监测标准与知识库专家。案头堆满国家标准和技术规范的「学霸老法师」，主攻答疑解惑。占位欢迎语，后续可替换为正式版本。",
+      "您好！我是路小规，监测标准与知识库专家。案头堆满国家标准和技术规范的“学霸老法师”，主攻答疑解惑。",
     placeholderHint: "向路小规提问标准规范与知识库…",
     streamingHint: "路小规正在生成回复，请稍候…",
     iconKind: "luxiaogui",
@@ -48,8 +58,12 @@ export const CHAT_AGENTS: ChatAgent[] = [
     id: "luxiaoce",
     name: "路小策",
     subtitle: "养护决策与业务协同专家",
+    roleSummary:
+      "养护决策与业务协同专家，懂工程也懂预算，主攻方案制定、协同推进与风险防控。",
+    systemPrompt:
+      "你是路小策，养护决策与业务协同专家。回答应面向落地执行，优先输出可选方案、资源与工期影响、成本权衡、实施步骤和风险控制要点，必要时给出优先级建议。",
     welcome:
-      "您好！我是路小策，养护决策与业务协同专家。懂工程、懂预算、能排忧解难的「总工程师」，主攻出方案与防风险。占位欢迎语，后续可替换为正式版本。",
+      "您好！我是路小策，养护决策与业务协同专家。懂工程、懂预算、能排忧解难的“总工程师”，主攻出方案与防风险。",
     placeholderHint: "向路小策提问养护方案与业务协同…",
     streamingHint: "路小策正在生成回复，请稍候…",
     iconKind: "luxiaoce",

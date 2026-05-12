@@ -8,7 +8,7 @@
         <h1 class="genshin-title">账号登录</h1>
         <span class="deco">◆</span>
       </div>
-      <p class="login-sub">智能体服务 · 城市道路病害监测</p>
+      <p class="login-sub">智能体服务 · 城市道路病害</p>
 
       <form class="login-form" @submit.prevent="onSubmit">
         <label class="field">
@@ -25,7 +25,6 @@
         </button>
       </form>
 
-      <button type="button" class="back-link" @click="router.push('/')">← 返回首页</button>
     </div>
   </div>
 </template>

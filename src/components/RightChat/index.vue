@@ -263,9 +263,58 @@
                 </svg>
               </div>
             </div>
+            <div
+              v-if="msg.role === 'assistant' && msg.ragRefs?.length"
+              class="bubble-rag-refs"
+            >
+              <div class="bubble-rag-title">知识库引用</div>
+              <div
+                v-for="(r, ri) in msg.ragRefs"
+                :key="ri"
+                class="bubble-rag-item"
+              >
+                <div class="bubble-rag-meta">
+                  <span class="bubble-rag-filename">{{ r.filename }}</span>
+                  <span v-if="r.filepage > 0" class="bubble-rag-page"
+                    >第 {{ r.filepage }} 页</span
+                  >
+                </div>
+                <p class="bubble-rag-chunk">{{ r.chunk_content }}</p>
+                <button
+                  v-if="r.fileurl"
+                  type="button"
+                  class="bubble-rag-link"
+                  @click="onOpenRagCitation(r, msg)"
+                >
+                  在工作台查看原文
+                </button>
+                <a
+                  v-if="r.fileurl"
+                  :href="r.fileurl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="bubble-rag-link bubble-rag-link-secondary"
+                  >新窗口打开</a
+                >
+              </div>
+            </div>
             <div class="bubble-footer">
               <span class="bubble-time">{{ msg.time }}</span>
               <div class="bubble-footer-actions">
+                <button
+                  v-if="
+                    msg.role === 'assistant' &&
+                    msg.messageId &&
+                    !msg.loading
+                  "
+                  type="button"
+                  class="icon-btn fb-regen"
+                  title="基于本条重答（续写一轮）"
+                  :disabled="chatStore.isLoading"
+                  @click="onRegenerate(msg)"
+                >
+                  ⟳
+                </button>
                 <template
                   v-if="
                     msg.role === 'assistant' &&
@@ -490,6 +539,7 @@ import { useChatStore } from "../../stores/chatStore";
 import { useCanvasStore } from "../../stores/canvasStore";
 import { useAuthStore } from "../../stores/authStore";
 import type { ActionCard, ChatMessage } from "../../stores/chatStore";
+import type { RagControlItem } from "../../api/chatStream";
 import {
   isViewOpenDisabled,
   type CanvasViewType,
@@ -499,6 +549,7 @@ import AgentPersonaCarousel from "./AgentPersonaCarousel.vue";
 import ChatAgentIcon from "./ChatAgentIcon.vue";
 import { renderChatMarkdown } from "../../utils/renderMarkdown";
 import { useUiStore } from "../../stores/uiStore";
+import { useRagCitationStore } from "../../stores/ragCitationStore";
 import {
   buildChatChartEchartsOption,
   type ChatChartPayload,
@@ -512,6 +563,7 @@ const chatStore = useChatStore();
 const canvasStore = useCanvasStore();
 const auth = useAuthStore();
 const uiStore = useUiStore();
+const ragCitationStore = useRagCitationStore();
 
 /** 视窗内图表列表变化时触发助理气泡 caption 刷新 */
 const viewportChartSyncKey = computed(() =>
@@ -640,6 +692,24 @@ function onRemoveMessage(msg: ChatMessage) {
   chatStore.removeMessageById(msg.id);
 }
 
+async function onRegenerate(msg: ChatMessage) {
+  if (!msg.messageId || chatStore.isLoading) return;
+  await chatStore.sendMessage("请换一种更简洁的方式重答", {
+    regenerateFromMessageId: msg.messageId,
+  });
+}
+
+function onOpenRagCitation(r: RagControlItem, msg: ChatMessage) {
+  if (!r.fileurl?.trim()) return;
+  if (wide.value) uiStore.requestCollapseWorkspaceChatWide();
+  const ok = ragCitationStore.openFromRagItem(r, msg.id);
+  if (!ok) {
+    window.open(r.fileurl, "_blank", "noopener,noreferrer");
+    return;
+  }
+  canvasStore.focusCollectTabForCitation();
+}
+
 async function onDeleteConversation() {
   sessionDdOpen.value = false;
   try {
@@ -762,6 +832,7 @@ const selectedMentions = ref<(typeof mentionItemsSource)[0][]>([]);
 
 const VIEW_ICONS: Record<CanvasViewType, string> = {
   map: "🗺️",
+  collect: "📋",
   report: "📋",
   compliance: "🏆",
   workorder: "📑",
@@ -915,6 +986,8 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 </script>
 
 <style scoped>
+@import "./styles/session-toolbar.css";
+
 .right-panel-wrap {
   display: flex;
   flex-direction: column;
@@ -924,207 +997,6 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   gap: 10px;
   overflow: visible;
 }
-
-.session-toolbar {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 0 0 10px 0;
-  margin: 0 0 2px 0;
-  border-bottom: 1px solid rgba(74, 141, 183, 0.14);
-}
-.sess-inline-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: #8a9aac;
-  flex-shrink: 0;
-  letter-spacing: 0.3px;
-}
-.session-select-wrap {
-  flex: 1;
-  min-width: 0;
-}
-.session-dd {
-  position: relative;
-}
-.session-dd-trigger {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--neu-stroke-faint);
-  background: var(--bg-color);
-  box-shadow: var(--neu-inset-shallow);
-  font-size: 11px;
-  font-family: "Noto Sans SC", sans-serif;
-  font-weight: 500;
-  color: var(--genshin-blue-dark);
-  cursor: pointer;
-  text-align: left;
-  min-width: 0;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-.session-dd-trigger:hover:not(:disabled) {
-  border-color: rgba(74, 141, 183, 0.35);
-}
-.session-dd-trigger:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.session-dd-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-.session-dd-chevron {
-  flex-shrink: 0;
-  color: var(--genshin-blue);
-  opacity: 0.55;
-  transition:
-    transform 0.2s ease,
-    opacity 0.15s;
-}
-.session-dd-chevron.open {
-  transform: rotate(180deg);
-  opacity: 0.85;
-}
-.session-dd-panel {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(100% + 5px);
-  z-index: 220;
-  max-height: 240px;
-  overflow-y: auto;
-  padding: 6px;
-  border-radius: 12px;
-  background: var(--bg-color);
-  border: 1px solid var(--neu-border-highlight);
-  box-shadow:
-    0 10px 32px rgba(26, 58, 82, 0.14),
-    0 2px 8px rgba(26, 58, 82, 0.06),
-    var(--neu-extrude-md);
-}
-.session-dd-item {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  padding: 8px 10px;
-  margin: 0 0 2px 0;
-  border: none;
-  border-radius: 9px;
-  background: transparent;
-  cursor: pointer;
-  font-family: "Noto Sans SC", sans-serif;
-  text-align: left;
-  color: var(--genshin-blue-dark);
-  transition: background 0.12s;
-}
-.session-dd-item:last-child {
-  margin-bottom: 0;
-}
-.session-dd-item:hover {
-  background: rgba(74, 141, 183, 0.08);
-}
-.session-dd-item.active {
-  background: rgba(212, 168, 83, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(212, 168, 83, 0.28);
-}
-.session-dd-item-main {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.35;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  word-break: break-word;
-}
-.session-dd-item-icon {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--genshin-blue);
-  opacity: 0.85;
-}
-.session-dd-item-sub {
-  font-size: 10px;
-  color: #8a9aac;
-  font-weight: 500;
-  padding-left: 19px;
-}
-.session-dd-fade-enter-active,
-.session-dd-fade-leave-active {
-  transition:
-    opacity 0.16s ease,
-    transform 0.16s ease;
-}
-.session-dd-fade-enter-from,
-.session-dd-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-.sess-icon-btn {
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  border: 1px solid var(--neu-stroke-muted);
-  background: var(--bg-color);
-  color: var(--genshin-blue);
-  cursor: pointer;
-  box-shadow: var(--neu-extrude-sm);
-  transition: all 0.18s;
-}
-.sess-icon-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.sess-add:hover:not(:disabled) {
-  border-color: rgba(74, 141, 183, 0.4);
-  color: var(--genshin-blue-dark);
-  box-shadow: var(--neu-extrude-md);
-}
-.sess-trash {
-  color: #c44;
-  background: rgba(224, 112, 112, 0.06);
-  border-color: rgba(224, 112, 112, 0.3);
-}
-.sess-trash:hover:not(:disabled) {
-  background: rgba(224, 112, 112, 0.14);
-  box-shadow: 0 2px 8px rgba(224, 112, 112, 0.18);
-}
-.sess-wide {
-  color: var(--genshin-blue);
-  background: rgba(74, 141, 183, 0.06);
-  border-color: rgba(74, 141, 183, 0.28);
-}
-.sess-wide:hover:not(:disabled) {
-  border-color: rgba(74, 141, 183, 0.45);
-  color: var(--genshin-blue-dark);
-  box-shadow: var(--neu-extrude-md);
-}
-.sess-wide.active {
-  border-color: rgba(74, 141, 183, 0.55);
-  background: rgba(74, 141, 183, 0.14);
-  color: var(--genshin-blue-dark);
-  box-shadow:
-    inset 1px 1px 3px rgba(26, 58, 82, 0.08),
-    var(--neu-extrude-sm);
-}
-
 .avatar-section {
   position: relative;
   display: flex;
@@ -1509,7 +1381,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   margin: 0;
   padding: 4px 0 0;
   font-size: 0.85em;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
 .md-body :deep(.chat-ref-link) {
   display: inline-block;
@@ -1531,7 +1403,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   border-radius: 8px;
   font-size: 0.82em;
   line-height: 1.5;
-  color: #5a6570;
+  color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 10em;
@@ -1553,7 +1425,6 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 }
 .md-body :deep(.chat-picture-img) {
   display: block;
-  vertical-align: middle;
 }
 .md-body :deep(.chat-chart-caption) {
   margin: 0.35em 0 0.2em;
@@ -1569,7 +1440,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   border: 1px dashed rgba(74, 141, 183, 0.35);
 }
 .md-body :deep(.chat-chart-caption--muted) {
-  color: #8a9aac;
+  color: var(--text-muted);
   background: rgba(90, 106, 124, 0.06);
   border: 1px dashed rgba(90, 106, 124, 0.2);
 }
@@ -1872,7 +1743,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 }
 .ac-sub {
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1899,7 +1770,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   background: rgba(74, 141, 183, 0.07);
   color: var(--genshin-blue-dark);
   font-size: 10px;
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
   cursor: pointer;
   box-shadow: var(--neu-extrude-sm);
   transition:
@@ -1949,6 +1820,70 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   color: rgba(255, 255, 255, 0.85);
 }
 
+.bubble-rag-refs {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(74, 141, 183, 0.06);
+  border: 1px solid rgba(74, 141, 183, 0.15);
+  font-size: 11px;
+}
+.bubble-rag-title {
+  font-weight: 600;
+  color: var(--genshin-blue);
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.bubble-rag-item {
+  margin-bottom: 8px;
+}
+.bubble-rag-item:last-child {
+  margin-bottom: 0;
+}
+.bubble-rag-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+}
+.bubble-rag-filename {
+  font-weight: 500;
+  color: var(--text-main);
+}
+.bubble-rag-page {
+  font-size: 10px;
+}
+.bubble-rag-chunk {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  max-height: 7em;
+  overflow: auto;
+}
+.bubble-rag-link {
+  color: var(--genshin-blue);
+  text-decoration: underline;
+  font-size: 11px;
+}
+button.bubble-rag-link {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.bubble-rag-link-secondary {
+  margin-left: 10px;
+  opacity: 0.88;
+}
+.fb-regen {
+  font-size: 15px;
+  line-height: 1;
+}
+
 .bubble-footer {
   display: flex;
   align-items: center;
@@ -1963,7 +1898,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 }
 .bubble-time {
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 .bubble.user .bubble-time {
@@ -2006,7 +1941,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   background: rgba(212, 168, 83, 0.14);
 }
 .bubble-remove-x {
-  color: #8a9aac;
+  color: var(--text-muted);
   background: rgba(255, 255, 255, 0.45);
 }
 .bubble-remove-x:hover {
@@ -2034,7 +1969,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 }
 .quick-label {
   font-size: 11px;
-  color: #8a9aac;
+  color: var(--text-muted);
   margin-bottom: 6px;
   padding-left: 2px;
 }
@@ -2056,7 +1991,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   );
   color: var(--genshin-blue);
   transition: all 0.2s;
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
   box-shadow: var(--neu-extrude-sm);
   line-height: 1.3;
   text-align: left;
@@ -2127,7 +2062,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   background: none;
   border: none;
   cursor: pointer;
-  color: #8a9aac;
+  color: var(--text-muted);
   font-size: 10px;
   padding: 1px 3px;
   border-radius: 50%;
@@ -2151,7 +2086,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 }
 .mention-title {
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
   margin-bottom: 8px;
   padding-left: 2px;
 }
@@ -2181,7 +2116,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 }
 .mention-sub {
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
 
 /* 已选 mentions */
@@ -2262,7 +2197,7 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   border: none;
   outline: none;
   resize: none;
-  font-family: "Noto Sans SC", sans-serif;
+  font-family: var(--font-ui);
   font-size: 12.5px;
   color: var(--genshin-blue-dark);
   line-height: 1.5;

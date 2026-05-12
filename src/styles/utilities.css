@@ -1,0 +1,157 @@
+.neu-card {
+  background: linear-gradient(
+    var(--neu-angle),
+    var(--neu-convex-from) 0%,
+    var(--neu-convex-mid) 55%,
+    var(--neu-convex-to) 100%
+  );
+  border-radius: 20px;
+  border: 1px solid var(--neu-border-highlight);
+  box-shadow: var(--neu-extrude-card);
+}
+
+.neu-card-sm {
+  background: linear-gradient(
+    var(--neu-angle),
+    var(--neu-convex-from) 0%,
+    var(--neu-convex-mid) 100%
+  );
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: var(--neu-extrude-card-sm);
+}
+
+.neu-inset {
+  background: linear-gradient(
+    var(--neu-angle),
+    var(--neu-concave-from) 0%,
+    var(--neu-concave-to) 100%
+  );
+  border-radius: 16px;
+  box-shadow: var(--neu-inset-ctl);
+}
+
+.neu-groove {
+  background: linear-gradient(
+    var(--neu-angle),
+    var(--neu-groove-from) 0%,
+    var(--neu-groove-to) 100%
+  );
+  border-radius: 14px;
+  box-shadow: var(--neu-inset-groove);
+}
+
+.neu-btn {
+  background: linear-gradient(var(--neu-angle), var(--neu-convex-from), #d0d5dc);
+  border: 1px solid var(--neu-border-highlight);
+  border-radius: 12px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: var(--font-ui);
+  box-shadow: var(--neu-extrude-btn);
+}
+
+.neu-btn:hover {
+  box-shadow: var(--neu-extrude-btn-hover);
+}
+
+.neu-btn:active {
+  background: linear-gradient(var(--neu-angle), #d0d5dc, var(--neu-convex-from));
+  box-shadow: var(--neu-inset-shallow);
+}
+
+.genshin-title {
+  font-family: var(--font-display);
+  background: linear-gradient(
+    135deg,
+    var(--genshin-gold-dark),
+    var(--genshin-gold),
+    var(--genshin-gold-light)
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 3px;
+  font-weight: 700;
+}
+
+.genshin-subtitle {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--genshin-blue-dark);
+  border-left: 3px solid var(--genshin-gold);
+  padding-left: 10px;
+}
+
+.corner-decor {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+
+.corner-decor::before,
+.corner-decor::after {
+  content: "";
+  position: absolute;
+  background: var(--genshin-gold);
+}
+
+.corner-decor.tl {
+  top: 8px;
+  left: 8px;
+}
+.corner-decor.tl::before {
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 2px;
+}
+.corner-decor.tl::after {
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 16px;
+}
+
+.corner-decor.br {
+  bottom: 8px;
+  right: 8px;
+}
+.corner-decor.br::before {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 2px;
+}
+.corner-decor.br::after {
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  height: 16px;
+}
+
+.corner-decor.tr {
+  top: 8px;
+  right: 8px;
+}
+.corner-decor.tr::before {
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 2px;
+}
+.corner-decor.tr::after {
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 16px;
+}
+
+.u-scrollbar-hidden {
+  scrollbar-width: none;
+}
+.u-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}

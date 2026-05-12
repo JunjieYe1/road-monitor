@@ -1,0 +1,16 @@
+:deep(.tdt-infowindow-content-wrapper) {
+  border-radius: var(--map-infowindow-radius, 10px) !important;
+  border: var(--map-infowindow-border, 1px solid rgba(212, 168, 83, 0.3)) !important;
+  background: var(--map-infowindow-bg, rgba(244, 247, 251, 0.86)) !important;
+  box-shadow: var(--map-infowindow-shadow, 4px 4px 12px rgba(0, 0, 0, 0.2)) !important;
+}
+
+:deep(.tdt-infowindow-content) {
+  margin: var(--map-infowindow-content-margin, unset) !important;
+  padding: var(--map-infowindow-content-padding, unset) !important;
+}
+
+:deep(.tdt-infowindow-tip-container) {
+  display: var(--map-infowindow-tip-display, block);
+  filter: var(--map-infowindow-tip-filter, none);
+}

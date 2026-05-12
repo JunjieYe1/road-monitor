@@ -164,10 +164,6 @@
           :sub="severityItems"
         />
       
-        <div class="neu-card status-card">
-          <div class="genshin-subtitle sec-title">处理状态概览</div>
-          <StatusBarList :items="statusBars" :total="total" fill-by-key />
-        </div>
         <PieChart :data="alertStore.typeDistribution" />
         <div class="neu-card alert-list-card">
           <div class="genshin-subtitle sec-title">最新告警</div>
@@ -194,6 +190,27 @@
 
       <!-- 数据采集 -->
       <div v-else-if="mode === 'collect'" key="collect" class="panel-content">
+        <div v-if="ragCitation.active" class="neu-card status-card rag-cite-card">
+          <div class="genshin-subtitle sec-title">当前引用</div>
+          <div class="rag-cite-name">{{ ragCitation.active.filename }}</div>
+          <div v-if="ragCitation.active.filepage > 0" class="rag-cite-meta">
+            第 {{ ragCitation.active.filepage }} 页
+          </div>
+          <p v-if="ragCitationSnippet" class="rag-cite-chunk">{{ ragCitationSnippet }}</p>
+          <div class="rag-cite-actions">
+            <button
+              v-if="ragCitation.active.sourceMessageId != null"
+              type="button"
+              class="rag-cite-btn"
+              @click="onScrollToCitationMessage"
+            >
+              定位对话
+            </button>
+            <button type="button" class="rag-cite-btn ghost" @click="ragCitation.clear()">
+              清除
+            </button>
+          </div>
+        </div>
         <StatCard label="累计上传报告" :value="47" unit="份" />
         <div class="neu-card status-card">
           <div class="genshin-subtitle sec-title">采集状态</div>
@@ -303,7 +320,7 @@
                 16
               </div>
               <div class="pl-item">
-                <span class="pl-dot" style="background: #b0bac8"></span>待开始
+                <span class="pl-dot" style="background: var(--text-faint)"></span>待开始
                 50
               </div>
             </div>
@@ -350,11 +367,11 @@ import { useUiStore } from "../../stores/uiStore";
 import { useCanvasStore, type CanvasViewType } from "../../stores/canvasStore";
 import { useReportStore, type ReportType } from "../../stores/reportStore";
 import { useComplianceStore } from "../../stores/complianceStore";
+import { useRagCitationStore } from "../../stores/ragCitationStore";
 import {
   SEV_LABELS,
   SEV_COLORS,
   SEV_ORDER,
-  STATUS_LABELS,
   STATUS_COLORS,
   scoreTierColor,
 } from "../../utils/labels";
@@ -372,6 +389,7 @@ const { chartSectionExpanded, viewportChartList } = storeToRefs(uiStore);
 const canvasStore = useCanvasStore();
 const reportStore = useReportStore();
 const complianceStore = useComplianceStore();
+const ragCitation = useRagCitationStore();
 const mode = computed(() => canvasStore.agentMode);
 const activeViewType = computed<CanvasViewType | null>(
   () => canvasStore.getActiveTab()?.type ?? null,
@@ -383,6 +401,18 @@ const panelKey = computed(() => {
   return mode.value;
 });
 
+const ragCitationSnippet = computed(() => {
+  const t = ragCitation.active?.chunk_content ?? "";
+  if (!t) return "";
+  return t.length > 160 ? `${t.slice(0, 160)}…` : t;
+});
+
+function onScrollToCitationMessage() {
+  const id = ragCitation.active?.sourceMessageId;
+  if (id == null) return;
+  uiStore.requestScrollToMessage(id);
+}
+
 const total = computed(() => alertStore.totalCount);
 
 const severityItems = computed(() =>
@@ -392,16 +422,8 @@ const severityItems = computed(() =>
     color: SEV_COLORS[l],
   })),
 );
-const statusBars = computed(() =>
-  (["pending", "processing", "completed"] as const).map((k) => ({
-    key: k,
-    label: STATUS_LABELS[k],
-    color: STATUS_COLORS[k],
-    count: alertStore.statusSummary[k],
-  })),
-);
 const recentAlerts = computed(() =>
-  [...alertStore.alerts]
+  [...alertStore.filteredAlerts]
     .sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity])
     .slice(0, 6),
 );
@@ -550,7 +572,7 @@ watch(
 }
 .panel-empty {
   font-size: 12px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
 .map-debug-card {
   font-size: 11px;
@@ -590,7 +612,7 @@ watch(
 .rhi-meta {
   margin-top: 4px;
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
 
 /* 履约侧栏 */
@@ -608,7 +630,7 @@ watch(
   justify-content: center;
   font-size: 12px;
   font-weight: 700;
-  color: #8a9aac;
+  color: var(--text-muted);
   background: var(--bg-groove);
 }
 .rank-num.gold {
@@ -663,18 +685,63 @@ watch(
 }
 .alert-addr {
   font-size: 11px;
-  color: #8a9aac;
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .alert-time {
   font-size: 11px;
-  color: #8a9aac;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 /* 数据采集 */
+.rag-cite-card {
+  margin-bottom: 10px;
+}
+.rag-cite-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 4px;
+  word-break: break-word;
+}
+.rag-cite-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.rag-cite-chunk {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  max-height: 5em;
+  overflow: auto;
+}
+.rag-cite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.rag-cite-btn {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(74, 141, 183, 0.35);
+  background: rgba(74, 141, 183, 0.1);
+  color: var(--genshin-blue);
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+.rag-cite-btn.ghost {
+  background: transparent;
+  border-color: var(--neu-stroke-muted);
+  color: var(--text-muted);
+}
+
 .collect-stats {
   display: flex;
   flex-direction: column;
@@ -694,7 +761,7 @@ watch(
 }
 .cs-label {
   flex: 1;
-  color: #5a6a7c;
+  color: var(--text-secondary);
 }
 .cs-val {
   font-weight: 700;
@@ -728,7 +795,7 @@ watch(
 }
 .task-time {
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
 .task-status {
   font-size: 10px;
@@ -767,7 +834,7 @@ watch(
 }
 .kbms-label {
   font-size: 10px;
-  color: #8a9aac;
+  color: var(--text-muted);
 }
 
 /* 运营管理 */
@@ -789,7 +856,7 @@ watch(
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #5a6a7c;
+  color: var(--text-secondary);
 }
 .pl-dot {
   width: 8px;

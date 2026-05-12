@@ -6,7 +6,10 @@ import { useMapOverlayStore } from "./mapOverlayStore";
 import { sevLabel, statusLabel } from "../utils/labels";
 import { formatLocaleTimeHm } from "../utils/localeFormat";
 import { stripUiContextTag, type UiContextHint } from "../utils/uiContextHint";
-import { streamChatTokens } from "../api/chatStream";
+import {
+  streamChatTokens,
+  type RagControlItem,
+} from "../api/chatStream";
 import {
   apiListConversations,
   apiGetMessages,
@@ -59,6 +62,16 @@ export interface ChatMessage {
   status?: string;
   likeBool?: boolean;
   dislikeBool?: boolean;
+  /** SSE `rag_control` 知识库引用 */
+  ragRefs?: RagControlItem[];
+}
+
+/** 透传自 api/chatStream，供 UI 引用类型 */
+export type { RagControlItem };
+
+export interface SendMessageOptions {
+  /** 传入上一轮逻辑 `message_id` 时进入重答/续写（须与当前 `thread_id` 同属一会话） */
+  regenerateFromMessageId?: string;
 }
 
 function threadPartFromKey(key: string): string {
@@ -92,6 +105,21 @@ function applyUiContextFromHint(hint: UiContextHint | null) {
   if (hint.canvasTab) canvas.pushTab({ type: hint.canvasTab });
 }
 
+function buildAgentRoleContext(agent: {
+  name: string;
+  subtitle: string;
+  roleSummary: string;
+  systemPrompt: string;
+}): string {
+  return (
+    `【当前专家角色】\n` +
+    `专家名称：${agent.name}\n` +
+    `专家方向：${agent.subtitle}\n` +
+    `角色说明：${agent.roleSummary}\n` +
+    `回复要求：${agent.systemPrompt}`
+  );
+}
+
 export const useChatStore = defineStore("chat", () => {
   const alertStore = useAlertStore();
   let mapControlEventSeq = 0;
@@ -111,7 +139,21 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   function setActiveChatAgent(id: string) {
-    if (getChatAgentById(id)) activeChatAgentId.value = id;
+    const next = getChatAgentById(id);
+    if (!next) return;
+    const prev = getChatAgentById(activeChatAgentId.value);
+    activeChatAgentId.value = id;
+    if (
+      !activeConversationKey.value &&
+      messages.value.length === 1 &&
+      messages.value[0]?.role === "assistant"
+    ) {
+      const onlyMsg = messages.value[0];
+      const prevWelcome = prev?.welcome;
+      if (!prevWelcome || onlyMsg.content === prevWelcome) {
+        onlyMsg.content = next.welcome;
+      }
+    }
   }
 
   const activeChatAgent = computed(
@@ -299,22 +341,42 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
-  function buildStreamPayload(
-    userText: string,
-    messageIdForRetry: string | null,
-  ) {
-    const kbLabels = activeKbSelections.value.map((k) => k.label);
-    const body: Record<string, unknown> = {
-      message: userText,
-      thread_id: activeThreadShort.value,
-      message_id: messageIdForRetry,
-      stream_report_tokens: true,
-    };
-    if (kbLabels.length) {
-      body.kb_ranges = kbLabels;
-      body.knowledge_base_ids = kbLabels;
+  /** 与 `/chat_stream_tokens` 文档 `skills_list` 对齐 */
+  function buildSkillsList(): string[] {
+    const skills = new Set<string>([
+      "tool_basics",
+      "sql_search",
+      "get_current_time",
+      "map_control",
+    ]);
+    if (activeKbSelections.value.length) {
+      skills.add("ragflow_search");
+      skills.add("rag_control");
     }
+    return [...skills];
+  }
+
+  /** 请求体仅含文档字段：`message`、`thread_id`、`message_id`、`stream_report_tokens`、`skills_list` */
+  function buildStreamPayload(
+    messageText: string,
+    messageIdForRetry: string | null,
+  ): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      message: messageText,
+      thread_id: activeThreadShort.value,
+      stream_report_tokens: true,
+      skills_list: buildSkillsList(),
+    };
+    if (messageIdForRetry) body.message_id = messageIdForRetry;
     return body;
+  }
+
+  function applyTitleToActiveConversation(title: string) {
+    const t = activeThreadShort.value;
+    const hit = conversations.value.find(
+      (c) => threadPartFromKey(c.key) === t,
+    );
+    if (hit) hit.label = title;
   }
 
   async function syncConversationKeyAfterSend() {
@@ -324,7 +386,10 @@ export const useChatStore = defineStore("chat", () => {
     if (hit) activeConversationKey.value = hit.key;
   }
 
-  async function sendMessage(content: string) {
+  async function sendMessage(
+    content: string,
+    options?: SendMessageOptions,
+  ) {
     if (!content.trim() || isLoading.value) return;
 
     alertStore.restoreAlertsAfterMapControl();
@@ -337,6 +402,9 @@ export const useChatStore = defineStore("chat", () => {
     attachedAlert.value = null;
     attachedWorkorder.value = null;
 
+    const agent = activeChatAgent.value;
+    const retryId = options?.regenerateFromMessageId?.trim() || null;
+
     messages.value.push({
       id: nextId++,
       role: "user",
@@ -346,6 +414,7 @@ export const useChatStore = defineStore("chat", () => {
     });
 
     let aiContent = content.trim();
+    aiContent += `\n\n${buildAgentRoleContext(agent)}`;
     if (ctx) {
       aiContent +=
         `\n\n【关联点位数据】\n` +
@@ -364,6 +433,11 @@ export const useChatStore = defineStore("chat", () => {
         `路段：${workCtx.road}\n` +
         `负责单位：${workCtx.unit} | 提交日期：${workCtx.date}\n` +
         `详细描述：${workCtx.desc}`;
+    }
+    const kbLine = activeKbRange.value.trim();
+    if (kbLine) {
+      aiContent +=
+        `\n\n【检索范围】\n用户指定在以下知识库范围中检索：${kbLine}。回答时请优先依据上述范围内的资料。`;
     }
 
     const loadingId = nextId++;
@@ -413,6 +487,7 @@ export const useChatStore = defineStore("chat", () => {
     let dt = "";
     let lastMeta: { message_id: string; group_id: number } | null = null;
     let sawDone = false;
+    const ragRefAcc: RagControlItem[] = [];
 
     function patchLoading(partial: Partial<ChatMessage>) {
       const idx = messages.value.findIndex((m) => m.id === loadingId);
@@ -422,7 +497,7 @@ export const useChatStore = defineStore("chat", () => {
     }
 
     try {
-      await streamChatTokens(buildStreamPayload(aiContent, null), (ev) => {
+      await streamChatTokens(buildStreamPayload(aiContent, retryId), (ev) => {
         if (ev.kind === "meta") {
           lastMeta = { message_id: ev.message_id, group_id: ev.group_id };
           // 仍保持 loading，直到首段 token/deepthought，否则界面一直停在点阵动画
@@ -434,7 +509,14 @@ export const useChatStore = defineStore("chat", () => {
           dt += ev.content;
           patchLoading({ content: acc, deepthought: dt, loading: false });
         } else if (ev.kind === "title") {
-          /* 可选：更新会话标题 */
+          applyTitleToActiveConversation(ev.content.trim());
+        } else if (ev.kind === "rag_control") {
+          ragRefAcc.push(...ev.data);
+          patchLoading({
+            ragRefs: ragRefAcc.length ? [...ragRefAcc] : undefined,
+            content: acc,
+            deepthought: dt,
+          });
         } else if (ev.kind === "map_control") {
           useMapOverlayStore().replace(ev.data);
           useCanvasStore().pushTab({ type: "map" });
@@ -446,10 +528,11 @@ export const useChatStore = defineStore("chat", () => {
           patchLoading({
             content: acc,
             loading: false,
-      time: formatLocaleTimeHm(),
+            time: formatLocaleTimeHm(),
             messageId: ev.message_id ?? lastMeta?.message_id,
             groupId: ev.group_id ?? lastMeta?.group_id,
             status: "error",
+            ragRefs: ragRefAcc.length ? [...ragRefAcc] : undefined,
           });
         } else if (ev.kind === "done") {
           sawDone = true;
@@ -459,10 +542,11 @@ export const useChatStore = defineStore("chat", () => {
             content: stripped,
             deepthought: dt,
             loading: false,
-      time: formatLocaleTimeHm(),
+            time: formatLocaleTimeHm(),
             messageId: ev.message_id ?? lastMeta?.message_id,
             groupId: ev.group_id ?? lastMeta?.group_id,
             status: "success",
+            ragRefs: ragRefAcc.length ? [...ragRefAcc] : undefined,
           });
         }
       });
@@ -476,10 +560,11 @@ export const useChatStore = defineStore("chat", () => {
             content: stripped || acc || "（流已结束）",
             deepthought: dt,
             loading: false,
-      time: formatLocaleTimeHm(),
+            time: formatLocaleTimeHm(),
             messageId: lastMeta?.message_id,
             groupId: lastMeta?.group_id,
             status: "success",
+            ragRefs: ragRefAcc.length ? [...ragRefAcc] : undefined,
           });
         }
       }
