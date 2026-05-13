@@ -22,7 +22,7 @@ export interface CanvasTab {
 }
 
 const VIEW_META: Record<CanvasViewType, { title: string; icon: string }> = {
-  map: { title: "智能地图", icon: "🗺️" },
+  map: { title: "全景洞察", icon: "🗺️" },
   collect: { title: "数据入仓", icon: "📋" },
   report: { title: "报告生成", icon: "📄" },
   compliance: { title: "履约画像", icon: "🏆" },
@@ -37,12 +37,17 @@ export function isViewOpenDisabled(type: CanvasViewType): boolean {
   return type === "plan" || type === "assess";
 }
 
+/** 画布顶部标签栏禁止切换（灰显）：履约画像、病害工单、风险预测 */
+export function isCanvasTabSwitchDisabled(type: CanvasViewType): boolean {
+  return type === "compliance" || type === "workorder" || type === "risk";
+}
+
 export const useCanvasStore = defineStore("canvas", () => {
   /** 下一次 activeTabId 变化时跳过 Workspace 内「切页清空对话」逻辑（如打开 RAG 引用切到数据入仓） */
   const skipChatResetOnNextTabChange = ref(false);
 
   const tabs = ref<CanvasTab[]>([
-    { id: "map", type: "map", title: "智能地图", icon: "🗺️", closable: false },
+    { id: "map", type: "map", title: "全景洞察", icon: "🗺️", closable: false },
     {
       id: "collect",
       type: "collect",

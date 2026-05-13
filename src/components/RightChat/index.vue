@@ -1425,6 +1425,21 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
 }
 .md-body :deep(.chat-picture-img) {
   display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  max-width: 100%;
+}
+.md-body :deep(.chat-picture-caption) {
+  margin: 0;
+  padding: 6px 10px 8px;
+  font-size: 0.82em;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-top: 1px solid rgba(74, 141, 183, 0.15);
+  background: rgba(255, 255, 255, 0.5);
+  word-break: break-word;
 }
 .md-body :deep(.chat-chart-caption) {
   margin: 0.35em 0 0.2em;

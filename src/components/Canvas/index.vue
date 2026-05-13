@@ -6,9 +6,15 @@
         <button
           v-for="tab in canvasStore.tabs"
           :key="tab.id"
+          type="button"
           class="tab-item"
-          :class="{ active: canvasStore.activeTabId === tab.id }"
-          @click="canvasStore.setActiveTab(tab.id)"
+          :class="{
+            active: canvasStore.activeTabId === tab.id,
+            'tab-item-locked': isTabLocked(tab),
+          }"
+          :aria-disabled="isTabLocked(tab)"
+          :title="tab.title"
+          @click="onTabClick(tab)"
         >
           <span class="tab-icon">{{ tab.icon }}</span>
           <span class="tab-title">{{ tab.title }}</span>
@@ -40,7 +46,9 @@
 import { computed } from "vue";
 import {
   useCanvasStore,
+  isCanvasTabSwitchDisabled,
   type CanvasViewType,
+  type CanvasTab,
 } from "../../stores/canvasStore";
 import MapView from "./views/MapView.vue";
 import PdfPage from "../../views/PdfPage.vue";
@@ -52,6 +60,15 @@ import RiskView from "./views/RiskView.vue";
 import AssessView from "./views/AssessView.vue";
 
 const canvasStore = useCanvasStore();
+
+function isTabLocked(tab: CanvasTab) {
+  return isCanvasTabSwitchDisabled(tab.type);
+}
+
+function onTabClick(tab: CanvasTab) {
+  if (isTabLocked(tab)) return;
+  canvasStore.setActiveTab(tab.id);
+}
 
 const VIEW_COMPONENTS: Record<CanvasViewType, any> = {
   map: MapView,
@@ -129,6 +146,22 @@ const activeViewComponent = computed(() => {
   color: #fff;
   border-color: transparent;
   box-shadow: var(--neu-glow-blue-deep);
+}
+
+.tab-item.tab-item-locked {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: var(--neu-extrude-sm);
+}
+
+.tab-item.tab-item-locked:hover {
+  color: #8a9aac;
+  box-shadow: var(--neu-extrude-sm);
+}
+
+.tab-item.tab-item-locked.active {
+  opacity: 1;
+  cursor: default;
 }
 
 .tab-icon {

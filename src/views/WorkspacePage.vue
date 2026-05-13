@@ -68,11 +68,7 @@
         class="center-panel lifecycle-center"
       />
       <Canvas v-if="!isDefectLifecycleRoute" class="center-panel" />
-      <RightChat
-        v-if="!isDefectLifecycleRoute"
-        v-model:wide="chatWide"
-        class="right-panel"
-      />
+      <RightChat v-model:wide="chatWide" class="right-panel" />
     </main>
   </div>
 </template>

@@ -200,13 +200,19 @@ function renderCustomPictureHtml(inner: string): string {
   if (href === '#') {
     return '<div class="chat-embed-block chat-embed-block--error">图片链接无效或仅支持 http(s)</div>'
   }
-  const alt = escapeHtml((obj.alt || '图片').trim())
+  const rawAlt = typeof obj.alt === 'string' ? obj.alt.trim() : ''
+  const altAttr = escapeHtml(rawAlt || '图片')
   const w =
     typeof obj.width === 'number' && obj.width > 0 && obj.width < 1600
       ? Math.round(obj.width)
       : undefined
-  const style = w ? ` style="max-width:min(100%,${w}px);height:auto;border-radius:10px"` : ' style="max-width:100%;height:auto;border-radius:10px"'
-  return `<div class="chat-picture-wrap"><img class="chat-picture-img" src="${href}" alt="${alt}"${style} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></div>`
+  // 仅 JSON 显式提供 alt 时渲染可见说明，避免默认「图片」重复占行
+  const captionHtml =
+    rawAlt !== ''
+      ? `<div class="chat-picture-caption" role="note">${escapeHtml(rawAlt)}</div>`
+      : ''
+  const imgStyle = w ? ` style="max-width:min(100%,${w}px)"` : ''
+  return `<div class="chat-picture-wrap"><img class="chat-picture-img" src="${href}" alt="${altAttr}"${imgStyle} loading="lazy" decoding="async" referrerpolicy="no-referrer" />${captionHtml}</div>`
 }
 
 function renderCustomChartPlaceholder(
