@@ -1,5 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
+import type { AlertPoint } from "../types/alertPoint";
+export type { AlertPoint } from "../types/alertPoint";
 import type {
   MapControlDiseaseProportion,
   MapControlPayload,
@@ -10,21 +12,13 @@ import { diseaseLevelToSeverity } from "../utils/severity";
 import {
   getRecheckAlertsJsonPath,
   shouldLoadRecheckAlerts,
+  shouldUseQuerySelectAlerts,
+  buildQuerySelectBody,
 } from "../config/demoData";
+import { querySelect } from "../api/queryDisease";
+import { mapDetectionRowToAlert } from "../utils/mapDetectionRowToAlert";
 
 /** 病害分类名与业务数据「病害类型」字段一致，不限于固定枚举 */
-export interface AlertPoint {
-  id: number;
-  lat: number;
-  lng: number;
-  type: string;
-  severity: "high" | "medium" | "low";
-  district: string;
-  address: string;
-  time: string;
-  status: "pending" | "processing" | "completed";
-  description?: string;
-}
 
 interface SeveritySummary {
   high: number;
@@ -108,6 +102,12 @@ function parseAlertPointArray(data: unknown): AlertPoint[] {
     };
     if (typeof description === "string" && description.length > 0)
       row.description = description;
+    const dy = item.defectYear ?? item.defect_year;
+    const dn = item.defectNumber ?? item.defect_number;
+    const gn = item.groupNumber ?? item.group_number;
+    if (typeof dy === "string" && dy.trim()) row.defectYear = dy.trim();
+    if (typeof dn === "string" && dn.trim()) row.defectNumber = dn.trim();
+    if (typeof gn === "string" && gn.trim()) row.groupNumber = gn.trim();
     out.push(row);
   }
   return out;
@@ -274,7 +274,7 @@ const FALLBACK_ALERTS: AlertPoint[] = [
 export const useAlertStore = defineStore("alert", () => {
   const alerts = ref<AlertPoint[]>([...FALLBACK_ALERTS]);
   const baseAlerts = ref<AlertPoint[]>(cloneAlerts(FALLBACK_ALERTS));
-  const alertsLoadedFrom = ref<"fallback" | "recheck">("fallback");
+  const alertsLoadedFrom = ref<"fallback" | "recheck" | "query">("fallback");
   const hasLoadedBaseAlerts = ref(false);
   const selectedAlert = ref<AlertPoint | null>(null);
   const selectedYear = ref<number>(2025);
@@ -412,6 +412,24 @@ export const useAlertStore = defineStore("alert", () => {
   }
 
   async function loadRecheckAlerts(): Promise<void> {
+    if (shouldUseQuerySelectAlerts()) {
+      try {
+        const { items } = await querySelect(buildQuerySelectBody());
+        const parsed = items
+          .map((row) => mapDetectionRowToAlert(row))
+          .filter((x): x is AlertPoint => x !== null);
+        if (parsed.length > 0) {
+          baseAlerts.value = cloneAlerts(parsed);
+          alerts.value = cloneAlerts(parsed);
+          alertsLoadedFrom.value = "query";
+          hasLoadedBaseAlerts.value = true;
+          return;
+        }
+      } catch {
+        /* 回退 JSON 或内联 */
+      }
+    }
+
     if (!shouldLoadRecheckAlerts()) {
       baseAlerts.value = cloneAlerts(FALLBACK_ALERTS);
       alerts.value = cloneAlerts(FALLBACK_ALERTS);

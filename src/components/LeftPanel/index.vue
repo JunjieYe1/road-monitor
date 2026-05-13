@@ -173,7 +173,7 @@
               :key="alert.id"
               class="alert-item neu-card-sm"
               :class="alert.severity"
-              @click="alertStore.selectAlert(alert)"
+              @click="onRecentAlertClick(alert)"
             >
               <SeverityBadge :level="alert.severity" size="sm" />
               <div class="alert-info">
@@ -362,7 +362,8 @@
 import { ref, computed, watch, nextTick } from "vue";
 import { storeToRefs } from "pinia";
 import { useAdaptiveVerticalScroll } from "../../composables/useAdaptiveVerticalScroll";
-import { useAlertStore } from "../../stores/alertStore";
+import { useAlertStore, type AlertPoint } from "../../stores/alertStore";
+import { useChatStore } from "../../stores/chatStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useCanvasStore, type CanvasViewType } from "../../stores/canvasStore";
 import { useReportStore, type ReportType } from "../../stores/reportStore";
@@ -384,12 +385,19 @@ import StatusBarList from "../common/StatusBarList.vue";
 import SelectableRankRow from "../common/SelectableRankRow.vue";
 
 const alertStore = useAlertStore();
+const chatStore = useChatStore();
 const uiStore = useUiStore();
 const { chartSectionExpanded, viewportChartList } = storeToRefs(uiStore);
 const canvasStore = useCanvasStore();
 const reportStore = useReportStore();
 const complianceStore = useComplianceStore();
 const ragCitation = useRagCitationStore();
+
+function onRecentAlertClick(alert: AlertPoint) {
+  alertStore.selectAlert(alert);
+  chatStore.attachAlert(alert);
+}
+
 const mode = computed(() => canvasStore.agentMode);
 const activeViewType = computed<CanvasViewType | null>(
   () => canvasStore.getActiveTab()?.type ?? null,

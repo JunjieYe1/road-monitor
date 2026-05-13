@@ -77,7 +77,12 @@
         </div>
         <div class="info-right">
           <div class="info-meta">
-            群组范围：{{ current!.district }} · 半径 {{ GROUP_RADIUS_METERS }}m
+            <template v-if="groupSource === 'api' && apiGroupNumber">
+              病害群组编号：{{ apiGroupNumber }} · {{ groupedAlerts.length }} 个点
+            </template>
+            <template v-else>
+              群组范围：{{ current!.district }} · 半径 {{ GROUP_RADIUS_METERS }}m
+            </template>
           </div>
           <div class="info-meta">群组病害数：{{ groupedAlerts.length }}</div>
           <div class="info-meta">
@@ -166,9 +171,7 @@
         <div class="analyze-head">
           <div class="analyze-title-block">
             <div class="section-title analyze-title">病害状态智能分析</div>
-            <div class="analyze-subtitle">
-              基于同区域+邻近距离分组，对生命周期节点和群组风险进行综合判断
-            </div>
+            <div class="analyze-subtitle">{{ analyzeSubtitle }}</div>
           </div>
           <div class="analytics-row">
             <div
@@ -196,7 +199,7 @@
             <p v-for="(line, idx) in impactLines" :key="idx" class="corr-p">
               {{ line }}
             </p>
-            <p class="corr-footnote">基于演示规则生成，用于页面交互验证。</p>
+            <p class="corr-footnote">{{ impactFootnote }}</p>
           </div>
         </div>
         <div v-else class="no-coords">暂无有效坐标，无法计算群组病害分布。</div>
@@ -226,7 +229,12 @@ import {
   getLifecycleMockForAlertId,
   getLifecycleMockForOverlay,
   type LifecycleWoPayload,
+  type LifecycleMockBundle,
 } from "../../defect/lifecycleMocks";
+import { buildLifecycleBundleFromSolve } from "../../defect/solveToLifecycle";
+import { querySelectGroup, querySolve } from "../../api/queryDisease";
+import { mapDetectionRowToAlert } from "../../utils/mapDetectionRowToAlert";
+import type { DetectionRowRaw } from "../../utils/mapDetectionRowToAlert";
 import { haversineMeters } from "../../utils/geoDistance";
 
 const SYNTHETIC_OVERLAY_ALERT_ID = -1;
@@ -309,6 +317,54 @@ const current = computed<AlertPoint | null>(() => {
   return alertStore.baseAlerts.find((a) => a.id === id) ?? null;
 });
 
+const apiGroupedAlerts = ref<AlertPoint[] | null>(null);
+const apiGroupNumber = ref("");
+const apiSolveBundle = ref<LifecycleMockBundle | null>(null);
+
+async function refreshQueryLifecycleData() {
+  apiGroupedAlerts.value = null;
+  apiGroupNumber.value = "";
+  apiSolveBundle.value = null;
+  const c = current.value;
+  if (!c || isOverlayMode.value || c.id === SYNTHETIC_OVERLAY_ALERT_ID) return;
+  const y = c.defectYear?.trim();
+  const n = c.defectNumber?.trim();
+  if (!y || !n) return;
+  try {
+    const g = await querySelectGroup({ year: y, number: n });
+    apiGroupNumber.value = g.group_number;
+    const rawRows: DetectionRowRaw[] = [];
+    if (g.source_item) rawRows.push(g.source_item);
+    for (const it of g.items) rawRows.push(it);
+    const mapped = rawRows
+      .map((row) => mapDetectionRowToAlert(row))
+      .filter((x): x is AlertPoint => x !== null);
+    const ids = new Set(mapped.map((a) => a.id));
+    if (!ids.has(c.id)) mapped.unshift({ ...c });
+    apiGroupedAlerts.value = [...mapped].sort(
+      (a, b) => timeWeight(a.time) - timeWeight(b.time) || a.id - b.id,
+    );
+  } catch {
+    apiGroupedAlerts.value = null;
+  }
+  try {
+    const sol = await querySolve({ year: y, number: n });
+    apiSolveBundle.value = buildLifecycleBundleFromSolve({
+      year: sol.year,
+      number: sol.number,
+      diseaseType: c.type,
+      detectTime: c.time,
+      needsRectification: sol.needs_rectification,
+      reviewTotal: sol.review_total,
+      rectificationTotal: sol.rectification_total,
+      reviewRecords: sol.review_records,
+      rectificationRecords: sol.rectification_records,
+    });
+  } catch {
+    apiSolveBundle.value = null;
+  }
+}
+
 const notFound = computed(() => {
   if (!ready.value) return false;
   if (isOverlayMode.value) return false;
@@ -328,6 +384,11 @@ const hasCoords = computed(() => {
 const groupedAlerts = computed<AlertPoint[]>(() => {
   const c = current.value;
   if (!c || !hasCoords.value) return c ? [c] : [];
+  const api = apiGroupedAlerts.value;
+  if (api && api.length > 0) {
+    const hasCurrent = api.some((a) => a.id === c.id);
+    if (hasCurrent) return api;
+  }
   const inGroup = alertStore.baseAlerts
     .filter((a) => a.district === c.district)
     .filter((a) => isValidCoord(a.lat, a.lng))
@@ -345,9 +406,20 @@ const groupedAlerts = computed<AlertPoint[]>(() => {
   );
 });
 
+const groupSource = computed<"api" | "proximity">(() => {
+  const c = current.value;
+  if (!c) return "proximity";
+  const api = apiGroupedAlerts.value;
+  if (api && api.length > 0 && api.some((a) => a.id === c.id)) return "api";
+  return "proximity";
+});
+
 const groupTitle = computed(() => {
   const c = current.value;
   if (!c) return "病害生命周期";
+  if (groupSource.value === "api" && apiGroupNumber.value) {
+    return `${apiGroupNumber.value} · ${groupedAlerts.value.length}个病害`;
+  }
   return `${c.district} 群组 · ${groupedAlerts.value.length}个病害`;
 });
 
@@ -365,6 +437,10 @@ interface TimelineNode {
 function lifecycleStateForAlert(alert: AlertPoint) {
   if (alert.id === SYNTHETIC_OVERLAY_ALERT_ID) {
     return getLifecycleMockForOverlay();
+  }
+  const cur = current.value;
+  if (cur && alert.id === cur.id && apiSolveBundle.value) {
+    return apiSolveBundle.value;
   }
   return getLifecycleMockForAlertId(alert.id);
 }
@@ -444,6 +520,12 @@ const nearestDistanceM = computed(() => {
   return Math.min(...distances);
 });
 
+const analyzeSubtitle = computed(() =>
+  groupSource.value === "api"
+    ? "群组以检测表「对应病害群组编号」为准；结合各节点状态与坐标分布做综合判断"
+    : "基于同区域+邻近距离分组，对生命周期节点和群组风险进行综合判断",
+);
+
 const groupAnalytics = computed(() => {
   const rows = groupedAlerts.value;
   const highCount = rows.filter((x) => x.severity === "high").length;
@@ -456,14 +538,26 @@ const groupAnalytics = computed(() => {
   ];
 });
 
+const impactFootnote = computed(() =>
+  groupSource.value === "api"
+    ? "群组关系来自检测表「对应病害群组编号」（query/selectgroup）；下方邻域句为距离规则补充。"
+    : "基于演示规则生成，用于页面交互验证。",
+);
+
 const impactLines = computed(() => {
   const rows = groupedAlerts.value;
   const c = current.value;
   if (!c) return [];
   const lines: string[] = [];
-  lines.push(
-    `当前以“${c.district} + ${GROUP_RADIUS_METERS}m”形成临时群组，共识别 ${rows.length} 个病害对象。`,
-  );
+  if (groupSource.value === "api" && apiGroupNumber.value) {
+    lines.push(
+      `当前群组与检测表「对应病害群组编号」一致：${apiGroupNumber.value}，共 ${rows.length} 个病害对象。`,
+    );
+  } else {
+    lines.push(
+      `当前以“${c.district} + ${GROUP_RADIUS_METERS}m”形成临时群组，共识别 ${rows.length} 个病害对象。`,
+    );
+  }
   if (nearestDistanceM.value != null) {
     lines.push(
       `最近病害点距当前点约 ${Math.round(nearestDistanceM.value)}m，建议同窗口安排复测与养护。`,
@@ -513,6 +607,21 @@ watch(
     else chatStore.clearLifecyclePin();
   },
   { immediate: true },
+);
+
+watch(
+  () => ({
+    r: ready.value,
+    id: current.value?.id,
+    y: current.value?.defectYear,
+    n: current.value?.defectNumber,
+    ov: isOverlayMode.value,
+  }),
+  async () => {
+    if (!ready.value) return;
+    await refreshQueryLifecycleData();
+  },
+  { flush: "post" },
 );
 
 onBeforeUnmount(() => {

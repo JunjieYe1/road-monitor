@@ -213,6 +213,7 @@ import { ref, computed, watch, nextTick, shallowRef, markRaw } from 'vue'
 import { useTiandituHeatmap } from '../../../composables/useTiandituHeatmap'
 import { useRouter } from 'vue-router'
 import { useAlertStore, type AlertPoint } from '../../../stores/alertStore'
+import { useChatStore } from '../../../stores/chatStore'
 import { useMapOverlayStore } from '../../../stores/mapOverlayStore'
 import {
   defectCategoryColor,
@@ -234,6 +235,7 @@ interface OverlayMapRow {
 
 const router = useRouter()
 const alertStore = useAlertStore()
+const chatStore = useChatStore()
 const mapOverlayStore = useMapOverlayStore()
 
 const loadConfig = { v: '4.0', tk: '7db4d1823b7788dc88066899e23df0d5' }
@@ -440,15 +442,37 @@ function onMapInit(map: any) {
   mapInstance.value = markRaw(map)
 }
 
+/** 智能体叠加点 → 聊天「关联点位」用的 AlertPoint（与 map_control 语义对齐） */
+function overlayRowToAttachPoint(row: OverlayMapRow): AlertPoint {
+  let h = 0
+  for (let i = 0; i < row.id.length; i++)
+    h = Math.imul(31, h) + row.id.charCodeAt(i) | 0
+  const id = 5_000_000 + (Math.abs(h) % 1_000_000)
+  return {
+    id,
+    lat: row.lat,
+    lng: row.lng,
+    type: row.disease_category || '未分类',
+    severity: row.severity,
+    district: '智能体查询',
+    address: `${row.disease_name || row.disease_category} · ${row.disease_level}`,
+    time: new Date().toLocaleString('zh-CN', { hour12: false }),
+    status: 'pending',
+    description: row.disease_name || row.disease_category,
+  }
+}
+
 function onOverlayMarkerClick(row: OverlayMapRow) {
   selectedOverlay.value = row
   alertStore.selectAlert(null)
+  chatStore.attachAlert(overlayRowToAttachPoint(row))
   mapCenter.value = [row.lng, row.lat]
 }
 
 function onMarkerClick(alert: AlertPoint) {
   selectedOverlay.value = null
   alertStore.selectAlert(alert)
+  chatStore.attachAlert(alert)
   mapCenter.value = [alert.lng, alert.lat]
 }
 
@@ -461,6 +485,7 @@ function onMapClick() { closePopup() }
 function closePopup() {
   alertStore.selectAlert(null)
   selectedOverlay.value = null
+  chatStore.clearAttachedAlert()
 }
 
 function goToLifecycle(id: number) {
