@@ -60,8 +60,24 @@
           unit="份"
         />
         <div class="neu-card status-card">
-          <div class="genshin-subtitle sec-title">最近生成</div>
-          <div v-if="reportStore.histories.length" class="report-history-list">
+          <div class="report-history-head">
+            <div class="genshin-subtitle sec-title">最近生成</div>
+            <button
+              type="button"
+              class="report-reload-btn"
+              :disabled="reportStore.isLoading"
+              @click="reportStore.loadReports({ force: true })"
+            >
+              重试
+            </button>
+          </div>
+          <div v-if="reportStore.isLoading" class="panel-empty">
+            正在加载历史报告...
+          </div>
+          <div v-else-if="reportStore.error" class="panel-empty report-error">
+            {{ reportStore.error }}
+          </div>
+          <div v-else-if="reportStore.histories.length" class="report-history-list">
             <div
               v-for="item in reportStore.histories"
               :key="item.id"
@@ -69,10 +85,24 @@
               :class="{ active: reportStore.activeHistoryId === item.id }"
               @click="reportStore.selectHistory(item.id)"
             >
-              <div class="rhi-title">{{ item.title }}</div>
-              <div class="rhi-meta">
-                {{ reportTypeLabel(item.type) }} · {{ item.generatedAt }}
+              <div class="rhi-main">
+                <div class="rhi-title">{{ item.title }}</div>
+                <div class="rhi-meta">
+                  {{ reportHistoryMeta(item) }}
+                </div>
+                <div class="rhi-sub">
+                  {{ reportHistorySub(item) }}
+                </div>
               </div>
+              <button
+                type="button"
+                class="rhi-delete"
+                :disabled="!item.reportId"
+                title="删除报告"
+                @click.stop="onDeleteReport(item.id)"
+              >
+                删除
+              </button>
             </div>
           </div>
           <div v-else class="panel-empty">暂无历史记录，生成后自动沉淀</div>
@@ -211,8 +241,8 @@
             </button>
           </div>
         </div>
-        <StatCard label="累计上传报告" :value="47" unit="份" />
-        <div class="neu-card status-card">
+        <StatCard label="累计上传报告" :value="ragflowDocumentStore.total" unit="份" />
+        <div v-if="false" class="neu-card status-card">
           <div class="genshin-subtitle sec-title">采集状态</div>
           <div class="collect-stats">
             <div v-for="s in collectStats" :key="s.label" class="cs-item">
@@ -224,24 +254,33 @@
         </div>
         <div class="neu-card status-card">
           <div class="genshin-subtitle sec-title">近期上传任务</div>
-          <div class="task-list">
+          <div v-if="ragflowDocumentStore.loading && !ragflowDocumentStore.recentDocuments.length" class="panel-empty">
+            正在加载知识库文档...
+          </div>
+          <div v-else-if="ragflowDocumentStore.error" class="panel-empty report-error">
+            {{ ragflowDocumentStore.error }}
+          </div>
+          <div v-else-if="!ragflowDocumentStore.recentDocuments.length" class="panel-empty">
+            暂无上传文档
+          </div>
+          <div v-else class="task-list">
             <div
-              v-for="t in uploadTasks"
-              :key="t.id"
+              v-for="doc in ragflowDocumentStore.recentDocuments"
+              :key="doc.id"
               class="task-item neu-card-sm"
             >
               <span class="task-icon">📄</span>
               <div class="task-info">
-                <div class="task-name">{{ t.name }}</div>
-                <div class="task-time">{{ t.time }}</div>
+                <div class="task-name">{{ doc.name }}</div>
+                <div class="task-time">{{ ragflowDocumentMeta(doc) }}</div>
               </div>
-              <span class="task-status" :class="t.status">{{
-                taskLabel(t.status)
+              <span class="task-status" :class="ragflowDocumentStatusClass(doc.run)">{{
+                ragflowDocumentStatusLabel(doc.run)
               }}</span>
             </div>
           </div>
         </div>
-        <div class="neu-card status-card">
+        <div v-if="false" class="neu-card status-card">
           <div class="genshin-subtitle sec-title">知识库统计</div>
           <div class="kb-mini-stats">
             <div class="kbms-item">
@@ -366,9 +405,15 @@ import { useAlertStore, type AlertPoint } from "../../stores/alertStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useCanvasStore, type CanvasViewType } from "../../stores/canvasStore";
-import { useReportStore, type ReportType } from "../../stores/reportStore";
+import {
+  useReportStore,
+  type ReportHistoryItem,
+  type ReportType,
+} from "../../stores/reportStore";
 import { useComplianceStore } from "../../stores/complianceStore";
 import { useRagCitationStore } from "../../stores/ragCitationStore";
+import { useRagflowDocumentStore } from "../../stores/ragflowDocumentStore";
+import type { RagflowDocument } from "../../api/ragflowDocuments";
 import {
   SEV_LABELS,
   SEV_COLORS,
@@ -398,6 +443,7 @@ function onRecentAlertClick(alert: AlertPoint) {
   chatStore.attachAlert(alert);
 }
 
+const ragflowDocumentStore = useRagflowDocumentStore();
 const mode = computed(() => canvasStore.agentMode);
 const activeViewType = computed<CanvasViewType | null>(
   () => canvasStore.getActiveTab()?.type ?? null,
@@ -457,6 +503,37 @@ const uploadTasks = [
     status: "processing",
   },
 ];
+function formatRagflowDocumentSize(size?: number) {
+  if (typeof size !== "number" || !Number.isFinite(size) || size < 0) {
+    return "未知大小";
+  }
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function ragflowDocumentStatusLabel(run?: string) {
+  const value = String(run || "").toUpperCase();
+  if (value === "DONE") return "完成";
+  if (value === "RUNNING") return "处理中";
+  if (value === "UNSTART") return "未解析";
+  if (!value) return "未知";
+  return value;
+}
+
+function ragflowDocumentStatusClass(run?: string) {
+  const value = String(run || "").toUpperCase();
+  if (value === "DONE") return "done";
+  if (value === "RUNNING") return "processing";
+  if (value === "UNSTART") return "pending";
+  return "unknown";
+}
+
+function ragflowDocumentMeta(doc: RagflowDocument) {
+  const suffix = (doc.suffix || "pdf").toUpperCase();
+  return `${suffix} · ${formatRagflowDocumentSize(doc.size)} · ${ragflowDocumentStatusLabel(doc.run)}`;
+}
+
 function taskLabel(s: string) {
   if (s === "done") return "完成";
   if (s === "processing") return "处理中";
@@ -530,14 +607,47 @@ function reportTypeLabel(type: ReportType) {
   return REPORT_TYPE_LABELS[type] ?? "报告";
 }
 
+function formatReportFileSize(size?: number | null) {
+  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) {
+    return "大小未知";
+  }
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function reportHistoryMeta(item: ReportHistoryItem) {
+  const region = item.region || "未知地区";
+  const year = item.year ? `${item.year}年` : "未知年份";
+  const time = item.generatedAt || "时间未知";
+  return `${year} · ${region} · ${time}`;
+}
+
+function reportHistorySub(item: ReportHistoryItem) {
+  const status = item.status || "generated";
+  return `${reportTypeLabel(item.type)} · ${formatReportFileSize(item.fileSize)} · ${status}`;
+}
+
+async function onDeleteReport(id: string) {
+  if (!confirm("确定删除该报告？")) return;
+  try {
+    await reportStore.deleteReport(id);
+  } catch (e) {
+    alert(e instanceof Error ? e.message : "删除报告失败");
+  }
+}
+
 const panelRoot = ref<HTMLElement | null>(null);
 const { overflowY, overflowX, onEnter, onLeave, remeasure } =
   useAdaptiveVerticalScroll(panelRoot);
 
 watch(panelKey, async () => {
+  if (panelKey.value === "collect" && !ragflowDocumentStore.hasLoaded) {
+    void ragflowDocumentStore.loadDocuments(1);
+  }
   await nextTick();
   await remeasure();
-});
+}, { immediate: true });
 watch(
   recentAlerts,
   async () => {
@@ -593,12 +703,42 @@ watch(
 }
 
 /* 报告侧栏 */
+.report-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.report-history-head .sec-title {
+  margin-bottom: 0;
+}
+.report-reload-btn {
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--neu-stroke-muted);
+  background: var(--bg-color);
+  color: var(--genshin-blue);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: "Noto Sans SC", sans-serif;
+}
+.report-reload-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.report-error {
+  color: #b54444;
+}
 .report-history-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .report-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   padding: 10px 12px;
   cursor: pointer;
   transition: all 0.2s;
@@ -608,6 +748,10 @@ watch(
     4px 4px 10px var(--shadow-dark),
     -4px -4px 10px var(--shadow-light),
     0 0 0 2px rgba(74, 141, 183, 0.28) !important;
+}
+.rhi-main {
+  flex: 1;
+  min-width: 0;
 }
 .rhi-title {
   font-size: 12px;
@@ -621,6 +765,34 @@ watch(
   margin-top: 4px;
   font-size: 10px;
   color: var(--text-muted);
+}
+.rhi-sub {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #6f8092;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rhi-delete {
+  flex-shrink: 0;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(198, 79, 79, 0.22);
+  background: rgba(198, 79, 79, 0.08);
+  color: #b54444;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: "Noto Sans SC", sans-serif;
+  opacity: 0.85;
+}
+.rhi-delete:hover {
+  opacity: 1;
+  background: rgba(198, 79, 79, 0.14);
+}
+.rhi-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 /* 履约侧栏 */
@@ -819,6 +991,11 @@ watch(
 .task-status.processing {
   background: rgba(224, 160, 80, 0.1);
   color: #e0a050;
+}
+.task-status.pending,
+.task-status.unknown {
+  background: rgba(138, 154, 172, 0.12);
+  color: #8a9aac;
 }
 .kb-mini-stats {
   display: flex;

@@ -68,30 +68,80 @@
             <button class="entry-btn" type="button" title="功能建设中">
               Excel导入
             </button>
+            <button class="kb-reload-btn" type="button" :disabled="documentsLoading" @click="loadDocuments(documentPage)">
+              {{ documentsLoading ? "加载中..." : "刷新列表" }}
+            </button>
           </div>
         </div>
+        <div class="kb-toolbar">
+          <div class="kb-query-info">
+            <span>数据集：{{ documentDatasetId || "default" }}</span>
+            <span>共 {{ documentTotal }} 份 PDF 文档</span>
+          </div>
+        </div>
+
+        <div v-if="documentsError" class="kb-state kb-error">
+          <span>{{ documentsError }}</span>
+          <button type="button" @click="loadDocuments(documentPage)">重试</button>
+        </div>
+        <div v-else-if="documentsLoading && !displayedKbList.length" class="kb-state">
+          正在加载知识库文档...
+        </div>
+        <div v-else-if="!displayedKbList.length" class="kb-state">
+          暂无 PDF 文档，可使用下方 PDF 导入入口查看模拟流程。
+        </div>
+
         <div class="kb-list">
-          <div v-for="kb in kbList" :key="kb.id" class="kb-card" :class="{ active: chatStore.isKbSelected(kb.id) }">
-            <div class="kb-year">{{ kb.range }}</div>
+          <div
+            v-for="kb in displayedKbList"
+            :key="kb.id"
+            class="kb-card"
+            :class="{ active: chatStore.isKbSelected(kb.id), 'kb-card-local': isLocalDocument(kb) }"
+          >
+            <div class="kb-year" :title="kb.name">{{ kb.name }}</div>
             <div class="kb-meta">
-              <span>📄 {{ kb.reports }} 份报告</span>
-              <span>🗂️ {{ kb.records }} 条记录</span>
-              <span>💡 {{ kb.knowledge }} 知识点</span>
+              <span>📄 {{ kb.suffixLabel }} 文档</span>
+              <span>🧾 {{ kb.sizeLabel }}</span>
+              <span>🔖 ID：{{ shortId(kb.id) }}</span>
+              <span class="run-line">状态：<em :class="runClass(kb.run)">{{ runLabel(kb.run) }}</em></span>
             </div>
-            <div class="kb-badge" :class="chatStore.isKbSelected(kb.id) ? 'kb-on' : 'kb-off'">
+            <!-- <div class="kb-badge" :class="chatStore.isKbSelected(kb.id) ? 'kb-on' : 'kb-off'">
               {{ chatStore.isKbSelected(kb.id) ? "● 已选入对话" : "○ 未选" }}
-            </div>
+            </div> -->
             <div class="kb-btns">
-              <button class="kb-btn activate" @click="toggleKbPick(kb)">
+              <!-- <button class="kb-btn activate" type="button" @click="toggleKbPick(kb)">
                 {{ chatStore.isKbSelected(kb.id) ? "取消选择" : "选择" }}
+              </button> -->
+              <button
+                class="kb-btn view"
+                type="button"
+                :disabled="isLocalDocument(kb)"
+                :title="isLocalDocument(kb) ? '本地模拟文档暂无真实切片' : '查看文档切片'"
+                @click="openChunksDialog(kb)"
+              >
+                查看切片
               </button>
-              <button class="kb-btn del" @click="deleteKb(kb)">删除</button>
+              <button class="kb-btn del" type="button" disabled title="api.md 未提供删除接口">
+                删除
+              </button>
             </div>
           </div>
           <div class="kb-card add-kb" @click="showUpload = !showUpload">
             <span class="add-plus">＋</span>
             <span class="add-text">PDF导入</span>
           </div>
+        </div>
+
+        <div class="kb-pagination">
+          <button class="page-btn" type="button" :disabled="documentsLoading || documentPage <= 1"
+            @click="changeDocumentPage(documentPage - 1)">
+            上一页
+          </button>
+          <span class="page-info">第 {{ documentPage }} / {{ documentPageCount }} 页</span>
+          <button class="page-btn" type="button" :disabled="documentsLoading || documentPage >= documentPageCount"
+            @click="changeDocumentPage(documentPage + 1)">
+            下一页
+          </button>
         </div>
       </section>
 
@@ -100,6 +150,7 @@
         <section v-if="showUpload" class="neu-card pdf-section">
           <div class="sec-title">上传新报告</div>
 
+          <!-- 数据归属时间暂时隐藏，后续需要按年份/季度归档时恢复
           <div class="time-row">
             <span class="field-req">数据归属时间范围 *</span>
             <select v-model="selYear" class="neu-inset range-sel">
@@ -112,11 +163,9 @@
               <option value="Q3">Q3（7-9月）</option>
               <option value="Q4">Q4（10-12月）</option>
             </select>
-            <span class="req-hint">* 必填，用于知识库分类</span>
-            <button class="quick-import-btn" type="button" @click="useLastImport">
-              使用上次导入（免上传）
-            </button>
+            <span class="req-hint">* 仅用于本次上传记录展示</span>
           </div>
+          -->
 
           <div class="drop-zone" :class="{ dragover: isDrag }" @dragover.prevent="isDrag = true"
             @dragleave="isDrag = false" @drop.prevent="onDrop" @click="fileEl?.click()">
@@ -149,15 +198,15 @@
           </div>
 
           <button class="submit-btn" :disabled="!canStartProcess || !selYear || isProcesing" @click="startProcess">
-            {{ isProcesing ? "处理中..." : "开始解析处理" }}
+            {{ isProcesing ? "上传中..." : "开始上传同步" }}
           </button>
         </section>
       </transition>
 
-      <!-- 处理进度 -->
+      <!-- 上传同步进度 -->
       <transition name="slide-down">
         <section v-if="showProgress" class="neu-card pdf-section">
-          <div class="sec-title">解析处理进度</div>
+          <div class="sec-title">上传同步进度</div>
 
           <!-- 四步流程 -->
           <div class="flow-wrap">
@@ -195,72 +244,72 @@
               <span class="done-emoji">✅</span>
               <div class="done-info">
                 <div class="done-title">
-                  知识库「{{ rangeLabel }}」已准备就绪！
+                  文档已上传至知识库
                 </div>
                 <div class="done-sub">
-                  提取病害记录 <strong>247</strong> 条 · 知识点
-                  <strong>89</strong> 条
+                  已同步 <strong>{{ uploadedDocuments.length }}</strong> 份 PDF；解析状态以知识库列表为准。
                 </div>
               </div>
-              <button class="start-btn" @click="goAsk">立即开始提问 →</button>
+              <button class="start-btn" @click="goAsk">返回对话提问 →</button>
             </div>
           </transition>
+
+          <div v-if="uploadError" class="upload-error-box">
+            <div class="upload-error-title">上传失败</div>
+            <div class="upload-error-text">{{ uploadError }}</div>
+            <button class="retry-upload-btn" type="button" :disabled="isProcesing" @click="startProcess">
+              重新上传
+            </button>
+          </div>
         </section>
       </transition>
 
       <transition name="slide-down">
         <section v-if="showImportedData" class="neu-card pdf-section">
-          <div class="sec-title">导入数据模拟结果</div>
+          <div class="sec-title">上传同步结果</div>
           <div class="mock-source">
-            来源：{{ importedSourceName || lastImportedPdfName }}
+            来源：{{ importedSourceName || "本次上传文件" }}
           </div>
           <div class="summary-grid">
             <div class="summary-item neu-card-sm">
-              <div class="si-label">导入记录数</div>
-              <div class="si-value">{{ importSummary.totalRows }}</div>
+              <div class="si-label">上传文档数</div>
+              <div class="si-value">{{ uploadedDocuments.length }}</div>
             </div>
             <div class="summary-item neu-card-sm">
-              <div class="si-label">检测总里程</div>
-              <div class="si-value">{{ importSummary.totalLengthKm }} km</div>
+              <div class="si-label">文档总大小</div>
+              <div class="si-value">{{ uploadedSizeLabel }}</div>
             </div>
             <div class="summary-item neu-card-sm">
-              <div class="si-label">涉及道路数</div>
-              <div class="si-value">{{ importSummary.uniqueRoads }}</div>
+              <div class="si-label">解析提交</div>
+              <div class="si-value">{{ uploadParseStarted ? "已提交" : "未提交" }}</div>
             </div>
             <div class="summary-item neu-card-sm">
-              <div class="si-label">备注记录数</div>
-              <div class="si-value">{{ importSummary.remarkRows }}</div>
+              <div class="si-label">数据集</div>
+              <div class="si-value si-value-small">{{ uploadDatasetId || documentDatasetId || "默认" }}</div>
             </div>
           </div>
-          <div class="sub-block-title">按道路等级分布</div>
-          <div class="mini-bars">
-            <div v-for="item in importSummary.byLevel" :key="item.label" class="mini-bar-row">
-              <span class="mbr-label">{{ item.label }}</span>
-              <div class="mbr-track">
-                <div class="mbr-fill" :style="{ width: item.pct + '%' }"></div>
-              </div>
-              <span class="mbr-val">{{ item.count }}</span>
-            </div>
+          <div v-if="uploadParseError" class="upload-warn">
+            解析提交提示：{{ uploadParseError }}
           </div>
-          <div class="sub-block-title">明细预览（部分）</div>
+          <div class="sub-block-title">上传文档</div>
           <div class="table-wrap">
             <table class="mock-table">
               <thead>
                 <tr>
-                  <th>道路名称</th>
-                  <th>起止点</th>
-                  <th>道路等级</th>
-                  <th>检测长度(km)</th>
-                  <th>检测时间</th>
+                  <th>文档名称</th>
+                  <th>文档 ID</th>
+                  <th>大小</th>
+                  <th>后缀</th>
+                  <th>解析状态</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(row, idx) in importedRowsPreview" :key="idx">
-                  <td>{{ row.roadName }}</td>
-                  <td>{{ row.rangeDesc }}</td>
-                  <td>{{ row.roadLevel }}</td>
-                  <td>{{ row.lengthKm }}</td>
-                  <td>{{ row.detectTime }}</td>
+                <tr v-for="row in uploadedDocuments" :key="row.id">
+                  <td>{{ row.name }}</td>
+                  <td>{{ shortId(row.id) }}</td>
+                  <td>{{ row.size == null ? "未知大小" : fmtSize(row.size) }}</td>
+                  <td>{{ (row.suffix || "pdf").toUpperCase() }}</td>
+                  <td>{{ runLabel(row.run) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -268,6 +317,56 @@
         </section>
       </transition>
     </div>
+
+    <transition name="modal-fade">
+      <div v-if="showChunksDialog" class="modal-overlay" @click.self="closeChunksDialog">
+        <div class="modal-box neu-card chunks-modal" role="dialog" aria-modal="true">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">文档切片</div>
+              <div class="modal-subtitle" :title="activeChunkDocument?.name">
+                {{ activeChunkDocument?.name || "未选择文档" }}
+              </div>
+            </div>
+            <button class="modal-close" type="button" aria-label="关闭切片弹窗" @click="closeChunksDialog">×</button>
+          </div>
+
+          <div class="chunk-meta-row">
+            <span>共 {{ chunkTotal }} 条切片</span>
+            <span v-if="chunkDatasetId">数据集：{{ chunkDatasetId }}</span>
+          </div>
+
+          <div v-if="chunksError" class="kb-state kb-error">
+            <span>{{ chunksError }}</span>
+            <button type="button" @click="loadChunks(chunkPage)">重试</button>
+          </div>
+          <div v-else-if="chunksLoading && !chunkList.length" class="kb-state">
+            正在加载文档切片...
+          </div>
+          <div v-else-if="!chunkList.length" class="kb-state">
+            当前文档暂无切片内容。
+          </div>
+          <div v-else class="chunk-list u-scrollbar-hidden">
+            <article v-for="chunk in chunkList" :key="chunk.id" class="chunk-item neu-card-sm">
+              <div class="chunk-title">切片 {{ shortId(chunk.id) }}</div>
+              <p>{{ chunk.content || "（空内容）" }}</p>
+            </article>
+          </div>
+
+          <div class="kb-pagination chunk-pagination">
+            <button class="page-btn" type="button" :disabled="chunksLoading || chunkPage <= 1"
+              @click="changeChunkPage(chunkPage - 1)">
+              上一页
+            </button>
+            <span class="page-info">第 {{ chunkPage }} / {{ chunkPageCount }} 页</span>
+            <button class="page-btn" type="button" :disabled="chunksLoading || chunkPage >= chunkPageCount"
+              @click="changeChunkPage(chunkPage + 1)">
+              下一页
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -281,8 +380,15 @@ import {
   useRagCitationStore,
   buildPdfViewerSrc,
 } from "../stores/ragCitationStore";
+import { useRagflowDocumentStore } from "../stores/ragflowDocumentStore";
 import { formatLocaleDateTimeClock } from "../utils/localeFormat";
-import defaultPdfImport from "../config/defaultPdfImport.json";
+import {
+  apiListRagflowDocumentChunks,
+  apiListRagflowDocuments,
+  apiUploadRagflowDocuments,
+  type RagflowChunk,
+  type RagflowDocument,
+} from "../api/ragflowDocuments";
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false,
@@ -291,6 +397,7 @@ const router = useRouter();
 const chatStore = useChatStore();
 const canvasStore = useCanvasStore();
 const ragCitation = useRagCitationStore();
+const ragflowDocumentStore = useRagflowDocumentStore();
 const embedded = computed(() => props.embedded);
 
 const citationViewerSrc = computed(() => {
@@ -337,24 +444,156 @@ let _t: ReturnType<typeof setInterval>;
 onMounted(() => {
   tick();
   _t = setInterval(tick, 1000);
+  void loadDocuments(1);
 });
 onUnmounted(() => clearInterval(_t));
 function tick() {
   currentTime.value = formatLocaleDateTimeClock();
 }
 
-// TODO: API - GET /api/kb/list
-const kbList = ref([
-  { id: 1, range: "2025年度", reports: 47, records: 247, knowledge: 89 },
-  { id: 2, range: "2024年度", reports: 38, records: 198, knowledge: 72 },
-  { id: 3, range: "2023年度", reports: 29, records: 156, knowledge: 58 },
-]);
-function toggleKbPick(kb: (typeof kbList.value)[0]) {
-  chatStore.toggleKb({ id: String(kb.id), label: kb.range });
+interface KbCardDocument extends RagflowDocument {
+  isLocal?: boolean;
+  suffixLabel: string;
+  sizeLabel: string;
 }
-function deleteKb(kb: (typeof kbList.value)[0]) {
-  chatStore.removeKb(String(kb.id));
-  kbList.value = kbList.value.filter((k) => k.id !== kb.id);
+
+const DOCUMENT_PAGE_SIZE = 6;
+const CHUNK_PAGE_SIZE = 30;
+const documentList = ref<RagflowDocument[]>([]);
+const documentTotal = ref(0);
+const documentPage = ref(1);
+const documentDatasetId = ref("");
+const documentsLoading = ref(false);
+const documentsError = ref("");
+
+const displayedKbList = computed<KbCardDocument[]>(() => [
+  ...documentList.value.map((doc) => enrichKbDocument(doc, false)),
+]);
+const documentPageCount = computed(() =>
+  Math.max(1, Math.ceil(documentTotal.value / DOCUMENT_PAGE_SIZE)),
+);
+
+function enrichKbDocument(doc: RagflowDocument, isLocal: boolean): KbCardDocument {
+  return {
+    ...doc,
+    isLocal,
+    suffixLabel: (doc.suffix || "pdf").toUpperCase(),
+    sizeLabel: doc.size == null ? (isLocal ? "本地模拟" : "未知大小") : fmtSize(doc.size),
+  };
+}
+
+async function loadDocuments(page = 1) {
+  documentsLoading.value = true;
+  documentsError.value = "";
+  try {
+    const res = await apiListRagflowDocuments({
+      page,
+      page_size: DOCUMENT_PAGE_SIZE,
+      suffix: "pdf",
+      dataset_alias: "default",
+    });
+    documentList.value = res.docs;
+    documentTotal.value = res.total;
+    documentDatasetId.value = res.dataset_id;
+    documentPage.value = page;
+    ragflowDocumentStore.syncFromListResult(res, page);
+    await nextTick();
+    await remeasure();
+  } catch (e) {
+    documentsError.value =
+      e instanceof Error ? `文档列表加载失败：${e.message}` : "文档列表加载失败";
+  } finally {
+    documentsLoading.value = false;
+  }
+}
+
+function changeDocumentPage(page: number) {
+  const nextPage = Math.min(Math.max(1, page), documentPageCount.value);
+  if (nextPage === documentPage.value || documentsLoading.value) return;
+  void loadDocuments(nextPage);
+}
+
+function toggleKbPick(kb: RagflowDocument) {
+  chatStore.toggleKb({ id: String(kb.id), label: kb.name });
+}
+
+function isLocalDocument(kb: KbCardDocument) {
+  return kb.isLocal === true;
+}
+
+function shortId(id: string | number) {
+  const raw = String(id);
+  return raw.length > 10 ? `${raw.slice(0, 6)}...${raw.slice(-4)}` : raw;
+}
+
+function runLabel(run?: string) {
+  const value = String(run || "").toUpperCase();
+  if (value === "DONE") return "已解析";
+  if (value === "RUNNING") return "解析中";
+  if (value === "UNSTART") return "未解析";
+  if (!value) return "未知";
+  return value;
+}
+
+function runClass(run?: string) {
+  const value = String(run || "").toUpperCase();
+  if (value === "DONE") return "run-done";
+  if (value === "RUNNING") return "run-running";
+  if (value === "UNSTART") return "run-unstart";
+  return "run-unknown";
+}
+
+const showChunksDialog = ref(false);
+const activeChunkDocument = ref<RagflowDocument | null>(null);
+const chunkList = ref<RagflowChunk[]>([]);
+const chunkTotal = ref(0);
+const chunkPage = ref(1);
+const chunkDatasetId = ref("");
+const chunksLoading = ref(false);
+const chunksError = ref("");
+const chunkPageCount = computed(() => Math.max(1, Math.ceil(chunkTotal.value / CHUNK_PAGE_SIZE)));
+
+async function openChunksDialog(kb: RagflowDocument) {
+  activeChunkDocument.value = kb;
+  showChunksDialog.value = true;
+  chunkList.value = [];
+  chunkTotal.value = 0;
+  chunkPage.value = 1;
+  chunkDatasetId.value = "";
+  chunksError.value = "";
+  await loadChunks(1);
+}
+
+function closeChunksDialog() {
+  showChunksDialog.value = false;
+}
+
+async function loadChunks(page = 1) {
+  if (!activeChunkDocument.value) return;
+  chunksLoading.value = true;
+  chunksError.value = "";
+  try {
+    const res = await apiListRagflowDocumentChunks(activeChunkDocument.value.id, {
+      page,
+      page_size: CHUNK_PAGE_SIZE,
+      dataset_alias: "default",
+    });
+    chunkList.value = res.chunks;
+    chunkTotal.value = res.total;
+    chunkDatasetId.value = res.dataset_id;
+    chunkPage.value = page;
+  } catch (e) {
+    chunksError.value =
+      e instanceof Error ? `文档切片加载失败：${e.message}` : "文档切片加载失败";
+  } finally {
+    chunksLoading.value = false;
+  }
+}
+
+function changeChunkPage(page: number) {
+  const nextPage = Math.min(Math.max(1, page), chunkPageCount.value);
+  if (nextPage === chunkPage.value || chunksLoading.value) return;
+  void loadChunks(nextPage);
 }
 
 const showUpload = ref(false);
@@ -364,126 +603,36 @@ const years = ["2025", "2024", "2023", "2022", "2021"];
 const isDrag = ref(false);
 const fileEl = ref<HTMLInputElement | null>(null);
 const files = ref<File[]>([]);
-const lastImportedPdfName = defaultPdfImport.lastImportedDisplayName;
-const useLastImported = ref(false);
-/** 免上传时使用 public 内建 PDF，HEAD 取到的字节数（用于与实际上传一致展示大小） */
-const quickImportSizeBytes = ref<number | null>(null);
 const importedSourceName = ref("");
 
-type UploadListRow =
-  | {
-    mode: "file";
-    key: string;
-    name: string;
-    sizeBytes: number;
-    fileIndex: number;
-  }
-  | {
-    mode: "quick";
-    key: string;
-    name: string;
-    sizeBytes: number | null;
-  };
-
-const uploadListRows = computed((): UploadListRow[] => {
-  if (files.value.length > 0) {
-    return files.value.map((file, index) => ({
-      mode: "file",
-      key: fileRowKey(file, index),
-      name: file.name,
-      sizeBytes: file.size,
-      fileIndex: index,
-    }));
-  }
-  if (useLastImported.value) {
-    return [
-      {
-        mode: "quick",
-        key: "quick-default",
-        name: lastImportedPdfName,
-        sizeBytes: quickImportSizeBytes.value,
-      },
-    ];
-  }
-  return [];
-});
-const showImportedData = ref(false);
-
-const importSummary = {
-  totalRows: 421,
-  totalLengthKm: 307.538,
-  uniqueRoads: 233,
-  remarkRows: 234,
-  byLevel: [
-    { label: "支路", count: 212, pct: 50.4 },
-    { label: "主干路", count: 146, pct: 34.7 },
-    { label: "次干路", count: 60, pct: 14.3 },
-    { label: "城市快速路", count: 2, pct: 0.5 },
-    { label: "城市快速路辅道", count: 1, pct: 0.2 },
-  ],
+type UploadListRow = {
+  key: string;
+  name: string;
+  sizeBytes: number;
+  fileIndex: number;
 };
 
-const importedRowsPreview = [
-  {
-    roadName: "钱江路",
-    rangeDesc: "三新路 - 塘工局路",
-    roadLevel: "主干路",
-    lengthKm: 1.689,
-    detectTime: "2025年6月24日 - 2025年7月31日",
-  },
-  {
-    roadName: "运河东路",
-    rangeDesc: "艮山西路 - 钱江路",
-    roadLevel: "主干路",
-    lengthKm: 1.983,
-    detectTime: "2025年6月24日 - 2025年7月31日",
-  },
-  {
-    roadName: "环站东路",
-    rangeDesc: "天城路 - 环站南路",
-    roadLevel: "主干路",
-    lengthKm: 1.29,
-    detectTime: "2025年6月24日 - 2025年7月31日",
-  },
-  {
-    roadName: "临丁路",
-    rangeDesc: "洋家港桥 - 学堂港桥以西",
-    roadLevel: "主干路",
-    lengthKm: 4.702,
-    detectTime: "2025年6月24日 - 2025年7月31日",
-  },
-  {
-    roadName: "庆春东路",
-    rangeDesc: "之江路 - 凯旋路",
-    roadLevel: "主干路",
-    lengthKm: 3.457,
-    detectTime: "2025年6月24日 - 2025年7月31日",
-  },
-  {
-    roadName: "丁城路",
-    rangeDesc: "大农港路 - 同协路",
-    roadLevel: "次干路",
-    lengthKm: 3.135,
-    detectTime: "2025年6月24日 - 2025年7月31日",
-  },
-  {
-    roadName: "三里亭小区",
-    rangeDesc: "石桥路南端西侧机场路北侧",
-    roadLevel: "支路",
-    lengthKm: 2.266,
-    detectTime: "2025年6月24日 - 2025年7月31日",
-  },
-  {
-    roadName: "艮山西路",
-    rangeDesc: "彭埠铁路桥 - 凯旋路",
-    roadLevel: "城市快速路",
-    lengthKm: 2.96,
-    detectTime: "2025年7-8月",
-  },
-];
+const uploadListRows = computed((): UploadListRow[] => {
+  return files.value.map((file, index) => ({
+    key: fileRowKey(file, index),
+    name: file.name,
+    sizeBytes: file.size,
+    fileIndex: index,
+  }));
+});
+const showImportedData = ref(false);
+const uploadedDocuments = ref<RagflowDocument[]>([]);
+const uploadDatasetId = ref("");
+const uploadParseStarted = ref(false);
+const uploadParseError = ref("");
+const uploadError = ref("");
+const uploadedSizeLabel = computed(() => {
+  const total = uploadedDocuments.value.reduce((sum, doc) => sum + (doc.size ?? 0), 0);
+  return total > 0 ? fmtSize(total) : "未知大小";
+});
 
 const canStartProcess = computed(
-  () => files.value.length > 0 || useLastImported.value,
+  () => files.value.length > 0,
 );
 
 function onFile(e: Event) {
@@ -492,9 +641,8 @@ function onFile(e: Event) {
     ...f.filter((x) => x.type === "application/pdf" || x.name.endsWith(".pdf")),
   );
   if (files.value.length) {
-    useLastImported.value = false;
-    quickImportSizeBytes.value = null;
     importedSourceName.value = files.value.map((fx) => fx.name).join("，");
+    uploadError.value = "";
   }
 }
 function onDrop(e: DragEvent) {
@@ -502,9 +650,8 @@ function onDrop(e: DragEvent) {
   const f = Array.from(e.dataTransfer?.files || []);
   files.value.push(...f.filter((x) => x.name.endsWith(".pdf")));
   if (files.value.length) {
-    useLastImported.value = false;
-    quickImportSizeBytes.value = null;
     importedSourceName.value = files.value.map((fx) => fx.name).join("，");
+    uploadError.value = "";
   }
 }
 function fmtSize(b: number) {
@@ -521,56 +668,25 @@ function removeFile(index: number) {
 }
 
 function sizeLabelForRow(row: UploadListRow): string {
-  if (row.mode === "file") return fmtSize(row.sizeBytes);
-  if (row.sizeBytes != null) return fmtSize(row.sizeBytes);
-  return "—";
+  return fmtSize(row.sizeBytes);
 }
 
 function removeUploadRow(row: UploadListRow) {
-  if (row.mode === "quick") {
-    useLastImported.value = false;
-    quickImportSizeBytes.value = null;
-    importedSourceName.value = "";
-    return;
-  }
   removeFile(row.fileIndex);
-}
-
-async function probeQuickPdfSize() {
-  quickImportSizeBytes.value = null;
-  const path = defaultPdfImport.lastImportedPublicPath;
-  if (!path) return;
-  try {
-    const r = await fetch(path, { method: "HEAD" });
-    const len = r.headers.get("Content-Length");
-    if (len) quickImportSizeBytes.value = Number.parseInt(len, 10);
-  } catch {
-    quickImportSizeBytes.value = null;
-  }
-}
-
-async function useLastImport() {
-  showUpload.value = true;
-  useLastImported.value = true;
-  files.value = [];
-  importedSourceName.value = lastImportedPdfName;
-  await probeQuickPdfSize();
+  importedSourceName.value = files.value.map((fx) => fx.name).join("，");
 }
 
 const steps = [
-  { title: "上传解析", desc: "文件格式验证与内容解析" },
-  { title: "病害卡片提取", desc: "识别病害信息结构化存储" },
-  { title: "知识库抽取", desc: "提取检测原理与技术方法" },
-  { title: "结构化入库", desc: "数据写入数据库与知识库" },
+  { title: "文件校验", desc: "确认文件格式与上传清单" },
+  { title: "上传到 RAGFlow", desc: "同步 PDF 到知识库数据集" },
+  { title: "同步文档列表", desc: "刷新知识库文档状态" },
+  { title: "上传完成", desc: "文档进入知识库列表" },
 ];
 const showProgress = ref(false);
 const isProcesing = ref(false);
 const doneSteps = ref(0);
 const progress = ref(0);
 const isDone = ref(false);
-const rangeLabel = computed(
-  () => `${selYear.value}年${selQ.value === "full" ? "全年" : selQ.value}`,
-);
 
 function nodeClass(i: number) {
   return i < doneSteps.value
@@ -580,47 +696,55 @@ function nodeClass(i: number) {
       : "";
 }
 
-// TODO: API - POST /api/pdf/upload  { files, timeRange }
 async function startProcess() {
   if (!canStartProcess.value) return;
   showProgress.value = true;
   isProcesing.value = true;
   isDone.value = false;
   showImportedData.value = false;
+  uploadError.value = "";
+  uploadParseError.value = "";
+  uploadedDocuments.value = [];
   doneSteps.value = 0;
   progress.value = 0;
 
-  for (let i = 0; i < steps.length; i++) {
-    doneSteps.value = i;
-    await animProg(i * 25, (i + 1) * 25 - 2, 900);
-    await delay(200);
-  }
-  doneSteps.value = steps.length;
-  await animProg(98, 100, 200);
-  isProcesing.value = false;
-  isDone.value = true;
-  showImportedData.value = true;
-  if (!importedSourceName.value) {
-    importedSourceName.value = useLastImported.value
-      ? lastImportedPdfName
-      : files.value.map((fx) => fx.name).join("，") || lastImportedPdfName;
-  }
+  try {
+    doneSteps.value = 0;
+    await animProg(0, 24, 400);
+    doneSteps.value = 1;
+    await animProg(24, 45, 300);
 
-  const range = rangeLabel.value;
-  if (!kbList.value.find((k) => k.range.startsWith(selYear.value))) {
-    kbList.value.unshift({
-      id: Date.now(),
-      range: range + (selQ.value === "full" ? "度" : ""),
-      reports: files.value.length || (useLastImported.value ? 1 : 0),
-      records: 247,
-      knowledge: 89,
-    });
+    const uploadFiles = [...files.value];
+    const res = await apiUploadRagflowDocuments(uploadFiles, { parse: false });
+    uploadedDocuments.value = res.uploaded;
+    uploadDatasetId.value = res.dataset_id;
+    uploadParseStarted.value = res.parse_started;
+    uploadParseError.value = formatUploadDetail(res.parse_error);
+    if (!importedSourceName.value) {
+      importedSourceName.value = uploadFiles.map((fx) => fx.name).join("，");
+    }
+
+    doneSteps.value = 2;
+    await animProg(45, 72, 420);
+    await loadDocuments(1);
+
+    doneSteps.value = 3;
+    await animProg(72, 98, 420);
+    doneSteps.value = steps.length;
+    await animProg(98, 100, 180);
+
+    files.value = [];
+    if (fileEl.value) fileEl.value.value = "";
+    isDone.value = true;
+    showImportedData.value = true;
+  } catch (e) {
+    uploadError.value = e instanceof Error ? e.message : "上传请求失败";
+    progress.value = Math.max(progress.value, 45);
+  } finally {
+    isProcesing.value = false;
   }
 }
 
-function delay(ms: number) {
-  return new Promise<void>((r) => setTimeout(r, ms));
-}
 function animProg(from: number, to: number, dur: number) {
   return new Promise<void>((resolve) => {
     const t0 = performance.now();
@@ -633,29 +757,33 @@ function animProg(from: number, to: number, dur: number) {
   });
 }
 
-function goAsk() {
-  chatStore.addKb({ id: `upload-${Date.now()}`, label: rangeLabel.value });
-  const mapTab = canvasStore.tabs.find((t) => t.type === "map");
-  if (mapTab) canvasStore.setActiveTab(mapTab.id);
-  else canvasStore.pushTab({ type: "map" });
-  router.push("/workspace");
+function formatUploadDetail(value: unknown): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
-function goBackToWorkspace() {
-  canvasStore.setAgentMode("insight");
+function goAsk() {
+  for (const doc of uploadedDocuments.value) {
+    chatStore.addKb({ id: doc.id, label: doc.name });
+  }
   router.push("/workspace");
 }
 
 watch(
   [
-    kbList,
+    documentList,
     showUpload,
     showProgress,
     files,
-    useLastImported,
     isDone,
     isProcesing,
     doneSteps,
+    uploadError,
   ],
   async () => {
     await nextTick();
@@ -731,8 +859,117 @@ watch(
 }
 .cph-label {
   font-size: 12px;
-  font-weight: 700;
+  font-family: "Noto Sans SC", sans-serif;
+  box-shadow: var(--neu-extrude-sm);
+  transition: all 0.2s;
+}
+
+.kb-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.kb-query-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #5a6a7c;
+}
+
+.kb-reload-btn,
+.page-btn,
+.kb-state button {
+  border: 1px solid var(--neu-stroke-muted);
+  padding: 5px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  background: var(--bg-color);
   color: var(--genshin-blue);
+  font-size: 12px;
+  font-family: "Noto Sans SC", sans-serif;
+  box-shadow: var(--neu-extrude-sm);
+  transition: all 0.2s;
+}
+
+.kb-reload-btn:disabled,
+.page-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.kb-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 68px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(74, 141, 183, 0.06);
+  color: #5a6a7c;
+  font-size: 13px;
+  text-align: center;
+}
+
+.kb-error {
+  background: rgba(224, 112, 112, 0.08);
+  color: #c45c5c;
+}
+
+/* 知识库卡片 */
+.kb-list {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.kb-card {
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: var(--bg-color);
+  box-shadow: var(--neu-extrude-lg);
+  transition: all 0.2s;
+  width: 220px;
+  min-height: 174px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kb-card:hover {
+  transform: translateY(-2px);
+}
+
+.kb-card.active {
+  box-shadow:
+    var(--neu-extrude-lg),
+    0 0 0 2px rgba(212, 168, 83, 0.45);
+}
+
+.kb-card-local {
+  border-color: rgba(92, 173, 138, 0.32);
+}
+
+.kb-year {
+  font-family: "Noto Serif SC", serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--genshin-blue-dark);
+  line-height: 1.35;
+  min-height: 42px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 .cph-name {
   font-size: 12px;
@@ -742,12 +979,32 @@ watch(
 }
 .cph-page {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #8a9aac;
+  min-height: 68px;
+}
+
+.run-line em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.run-done {
+  color: #5cad8a;
+}
+
+.run-running {
+  color: #e0a050;
+}
+
+.run-unstart,
+.run-unknown {
+  color: #8a9aac;
 }
 .cph-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  flex-wrap: wrap;
 }
 .citation-chunk-snippet {
   margin: 0 0 8px;
@@ -758,24 +1015,77 @@ watch(
   overflow: auto;
 }
 .citation-iframe-wrap {
+  width: 100%;
+  height: min(62vh, 720px);
+  min-height: 420px;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid rgba(74, 141, 183, 0.2);
   background: var(--bg-groove);
-  min-height: 280px;
 }
 .citation-iframe {
   display: block;
   width: 100%;
-  height: min(52vh, 420px);
-  min-height: 260px;
-  border: none;
+  height: 100%;
+  border: 0;
+  background: #fff;
 }
-.citation-iframe-hint {
-  margin: 6px 0 0;
-  font-size: 10px;
-  color: var(--text-muted);
+
+.kb-btn.view {
+  background: rgba(212, 168, 83, 0.12);
+  color: var(--genshin-gold-dark);
 }
+
+.kb-btn.del {
+  background: rgba(224, 112, 112, 0.1);
+  color: #e07070;
+}
+
+.kb-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.add-kb {
+  border: 2px dashed var(--neu-stroke-muted-strong);
+  background: transparent !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.add-kb:hover {
+  border-color: var(--genshin-blue);
+}
+
+.add-plus {
+  font-size: 24px;
+  color: #b0bac8;
+}
+
+.add-text {
+  font-size: 12px;
+  color: #b0bac8;
+}
+
+.kb-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: #5a6a7c;
+}
+
+.page-info {
+  min-width: 90px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 上传区 */
 .time-row {
   display: flex;
@@ -805,17 +1115,6 @@ watch(
 .req-hint {
   font-size: 11px;
   color: #e07070;
-}
-
-.quick-import-btn {
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px dashed rgba(74, 141, 183, 0.45);
-  background: rgba(74, 141, 183, 0.08);
-  color: var(--genshin-blue);
-  font-size: 12px;
-  font-family: var(--font-ui);
-  cursor: pointer;
 }
 
 .drop-zone {
@@ -1213,6 +1512,40 @@ watch(
   font-weight: 700;
 }
 
+.upload-error-box {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(224, 112, 112, 0.08);
+  border: 1px solid rgba(224, 112, 112, 0.25);
+}
+
+.upload-error-title {
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c45c5c;
+}
+
+.upload-error-text {
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #8f4c4c;
+  word-break: break-word;
+}
+
+.retry-upload-btn {
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: "Noto Sans SC", sans-serif;
+  background: rgba(224, 112, 112, 0.12);
+  color: #c45c5c;
+}
+
 .start-btn {
   padding: 11px 26px;
   border-radius: 12px;
@@ -1302,6 +1635,24 @@ watch(
   color: var(--genshin-blue-dark);
 }
 
+.si-value-small {
+  font-size: 13px;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.upload-warn {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(224, 160, 80, 0.1);
+  border: 1px solid rgba(224, 160, 80, 0.24);
+  color: #9a6a25;
+  font-size: 12px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
 .sub-block-title {
   margin: 6px 0 10px;
   font-size: 13px;
@@ -1380,5 +1731,123 @@ watch(
 
 .mock-table tbody tr:hover td {
   background: rgba(74, 141, 183, 0.03);
+}
+
+/* 切片弹窗 */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-box {
+  padding: 22px 24px;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chunks-modal {
+  width: min(860px, calc(100vw - 40px));
+  max-height: min(760px, calc(100vh - 40px));
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modal-title {
+  font-family: "Noto Serif SC", serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--genshin-blue-dark);
+}
+
+.modal-subtitle {
+  max-width: 680px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8a9aac;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #8a9aac;
+  background: rgba(163, 177, 198, 0.18);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--genshin-blue-dark);
+}
+
+.chunk-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #5a6a7c;
+}
+
+.chunk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px 4px 2px 2px;
+  min-height: 140px;
+  max-height: 500px;
+}
+
+.chunk-item {
+  padding: 12px 14px;
+}
+
+.chunk-title {
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--genshin-blue-dark);
+}
+
+.chunk-item p {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+  font-size: 12px;
+  color: #5a6a7c;
+}
+
+.chunk-pagination {
+  margin-top: 0;
+}
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.2s;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -1,5 +1,12 @@
 /** 对话侧栏展示的虚拟智能体（与后端路由无关，纯前端人设） */
 export type ChatAgentIconKind = "luxiaoxi" | "luxiaogui" | "luxiaoce";
+export type ChatSkill =
+  | "tool_basics"
+  | "get_current_time"
+  | "sql_search"
+  | "ragflow_search"
+  | "map_control"
+  | "rag_control";
 
 export interface ChatAgent {
   id: string;
@@ -77,6 +84,14 @@ export const CHAT_AGENTS: ChatAgent[] = [
 
 export const DEFAULT_CHAT_AGENT_ID = CHAT_AGENTS[0]!.id;
 
+const REQUIRED_CHAT_SKILLS: ChatSkill[] = [ "get_current_time"];
+
+const CHAT_AGENT_SKILLS: Record<string, ChatSkill[]> = {
+  luxiaoxi: ["sql_search", "map_control"],
+  luxiaogui: ["sql_search", "map_control", "ragflow_search", "rag_control"],
+  luxiaoce: ["ragflow_search", "rag_control"],
+};
+
 export function getChatAgentById(id: string): ChatAgent | undefined {
   return CHAT_AGENTS.find((a) => a.id === id);
 }
@@ -84,4 +99,9 @@ export function getChatAgentById(id: string): ChatAgent | undefined {
 export function getChatAgentIndex(id: string): number {
   const i = CHAT_AGENTS.findIndex((a) => a.id === id);
   return i >= 0 ? i : 0;
+}
+
+export function getChatAgentSkillsList(id: string): ChatSkill[] {
+  const agentSkills = CHAT_AGENT_SKILLS[id] ?? CHAT_AGENT_SKILLS[DEFAULT_CHAT_AGENT_ID] ?? [];
+  return Array.from(new Set([...REQUIRED_CHAT_SKILLS, ...agentSkills]));
 }

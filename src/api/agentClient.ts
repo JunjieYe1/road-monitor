@@ -8,6 +8,9 @@ const DEFAULT_PUBLIC_AGENT_BASE = 'http://47.114.93.164:8000'
 export function getAgentBaseUrl(): string {
   const raw = (import.meta.env.VITE_AGENT_BASE_URL as string | undefined) ?? ''
   let v = String(raw).replace(/\/$/, '')
+  if (!v && import.meta.env.DEV) {
+    v = '/agent'
+  }
   if (import.meta.env.PROD && (!v || v === '/agent')) {
     v = DEFAULT_PUBLIC_AGENT_BASE.replace(/\/$/, '')
   }
@@ -48,6 +51,13 @@ async function parseBody(res: Response): Promise<unknown> {
 
 async function handleResponse(res: Response): Promise<unknown> {
   const data = await parseBody(res)
+  if (
+    res.ok &&
+    typeof data === 'string' &&
+    /^\s*<!doctype html/i.test(data)
+  ) {
+    throw new Error('接口返回了 HTML 页面，请检查 VITE_AGENT_BASE_URL 或服务端 /agent 代理配置')
+  }
   if (res.status === 401) {
     agentToken.clear()
     onUnauthorized?.()

@@ -22,6 +22,7 @@ import {
   CHAT_AGENTS,
   DEFAULT_CHAT_AGENT_ID,
   getChatAgentById,
+  getChatAgentSkillsList,
 } from "../config/chatAgents";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -343,17 +344,7 @@ export const useChatStore = defineStore("chat", () => {
 
   /** 与 `/chat_stream_tokens` 文档 `skills_list` 对齐 */
   function buildSkillsList(): string[] {
-    const skills = new Set<string>([
-      "tool_basics",
-      "sql_search",
-      "get_current_time",
-      "map_control",
-    ]);
-    if (activeKbSelections.value.length) {
-      skills.add("ragflow_search");
-      skills.add("rag_control");
-    }
-    return [...skills];
+    return getChatAgentSkillsList(activeChatAgentId.value);
   }
 
   /** 请求体仅含文档字段：`message`、`thread_id`、`message_id`、`stream_report_tokens`、`skills_list` */
