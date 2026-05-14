@@ -30,7 +30,9 @@ function bodyForSelect(body: QuerySelectBody): Record<string, unknown> {
 
 function asRowArray(v: unknown): DetectionRowRaw[] {
   if (!Array.isArray(v)) return [];
-  return v.filter((x) => x && typeof x === "object" && !Array.isArray(x)) as DetectionRowRaw[];
+  return v
+    .filter((x) => x && typeof x === "object" && !Array.isArray(x))
+    .map((x) => x as DetectionRowRaw);
 }
 
 /** POST /query/select */

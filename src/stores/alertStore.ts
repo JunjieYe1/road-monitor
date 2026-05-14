@@ -12,8 +12,6 @@ import { diseaseLevelToSeverity } from "../utils/severity";
 import {
   getRecheckAlertsJsonPath,
   shouldLoadRecheckAlerts,
-  shouldUseQuerySelectAlerts,
-  buildQuerySelectBody,
 } from "../config/demoData";
 import { querySelect } from "../api/queryDisease";
 import { mapDetectionRowToAlert } from "../utils/mapDetectionRowToAlert";
@@ -412,22 +410,26 @@ export const useAlertStore = defineStore("alert", () => {
   }
 
   async function loadRecheckAlerts(): Promise<void> {
-    if (shouldUseQuerySelectAlerts()) {
-      try {
-        const { items } = await querySelect(buildQuerySelectBody());
-        const parsed = items
-          .map((row) => mapDetectionRowToAlert(row))
-          .filter((x): x is AlertPoint => x !== null);
-        if (parsed.length > 0) {
-          baseAlerts.value = cloneAlerts(parsed);
-          alerts.value = cloneAlerts(parsed);
-          alertsLoadedFrom.value = "query";
-          hasLoadedBaseAlerts.value = true;
-          return;
-        }
-      } catch {
-        /* 回退 JSON 或内联 */
+    try {
+      const { items } = await querySelect({
+        years: String(selectedYear.value),
+        regions:
+          selectedDistrict.value === "全部"
+            ? undefined
+            : selectedDistrict.value,
+      });
+      const parsed = items
+        .map((row) => mapDetectionRowToAlert(row))
+        .filter((x): x is AlertPoint => x !== null);
+      if (parsed.length > 0) {
+        baseAlerts.value = cloneAlerts(parsed);
+        alerts.value = cloneAlerts(parsed);
+        alertsLoadedFrom.value = "query";
+        hasLoadedBaseAlerts.value = true;
+        return;
       }
+    } catch {
+      /* 回退 JSON 或内联 */
     }
 
     if (!shouldLoadRecheckAlerts()) {

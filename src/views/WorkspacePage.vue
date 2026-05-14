@@ -60,6 +60,7 @@
       class="main-content"
       :class="{
         'chat-wide': chatWide,
+        'is-lifecycle': isDefectLifecycleRoute,
       }"
     >
       <LeftPanel v-if="!isDefectLifecycleRoute" class="left-panel" />
@@ -68,7 +69,11 @@
         class="center-panel lifecycle-center"
       />
       <Canvas v-if="!isDefectLifecycleRoute" class="center-panel" />
-      <RightChat v-model:wide="chatWide" class="right-panel" />
+      <RightChat
+        v-if="!isDefectLifecycleRoute"
+        v-model:wide="chatWide"
+        class="right-panel"
+      />
     </main>
   </div>
 </template>
@@ -346,6 +351,14 @@ onMounted(async () => {
 }
 .lifecycle-center {
   min-width: 0;
+}
+.main-content.is-lifecycle {
+  gap: 0;
+}
+.main-content.is-lifecycle .lifecycle-center {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: none;
 }
 .right-panel {
   width: 24%;

@@ -209,7 +209,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, shallowRef, markRaw } from 'vue'
+import { ref, computed, watch, nextTick, shallowRef, markRaw, onMounted } from 'vue'
 import { useTiandituHeatmap } from '../../../composables/useTiandituHeatmap'
 import { useRouter } from 'vue-router'
 import { useAlertStore, type AlertPoint } from '../../../stores/alertStore'
@@ -431,6 +431,19 @@ watch(
 const heatLayerActive = computed(() => activeLayer.value === 'heat')
 const { redraw: redrawHeatCanvas } = useTiandituHeatmap(mapInstance, heatMarkers, heatLayerActive)
 
+onMounted(async () => {
+  if (!alertStore.hasLoadedBaseAlerts || alertStore.alerts.length === 0) {
+    await alertStore.loadRecheckAlerts()
+  }
+})
+
+watch(
+  () => alertStore.selectedYear,
+  async () => {
+    await alertStore.loadRecheckAlerts()
+  },
+)
+
 /** 程序化改 center/zoom 时兜底重绘热力 Canvas（地图动画结束事件可能延后） */
 watch([mapCenter, mapZoom], () => {
   if (activeLayer.value !== 'heat') return
@@ -466,14 +479,12 @@ function onOverlayMarkerClick(row: OverlayMapRow) {
   selectedOverlay.value = row
   alertStore.selectAlert(null)
   chatStore.attachAlert(overlayRowToAttachPoint(row))
-  mapCenter.value = [row.lng, row.lat]
 }
 
 function onMarkerClick(alert: AlertPoint) {
   selectedOverlay.value = null
   alertStore.selectAlert(alert)
   chatStore.attachAlert(alert)
-  mapCenter.value = [alert.lng, alert.lat]
 }
 
 function onHealthClick(road: typeof healthRoads.value[0]) {

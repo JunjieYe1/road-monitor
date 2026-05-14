@@ -6,6 +6,13 @@ export interface LifecycleWoPayload {
   submittedAt: string;
   submittedBy: string;
   resultSummary: string;
+  category?: "rectification" | "review" | "mock";
+  detailRows?: {
+    key?: string;
+    label: string;
+    value: string;
+    kind?: "normal" | "location" | "media";
+  }[];
 }
 
 export interface LifecyclePhasePayload {

@@ -127,23 +127,28 @@
 
         <transition name="stage-detail" mode="out-in">
           <div :key="selectedNode.key" class="stage-detail">
-            <div class="detail-row">
-              <span class="dr-label">病害状态</span>
-              <span class="dr-val state-name">{{ selectedNode.stateLabel }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="dr-label">节点对象</span>
-              <span class="dr-val"
-                >#{{ selectedNode.alert.id }} · {{ selectedNode.alert.type }}</span
+            <div class="detail-grid">
+              <div
+                v-for="row in stageDetailMainRows"
+                :key="row.key"
+                class="detail-field"
               >
+                <span class="dr-label">{{ row.label }}</span>
+                <span
+                  class="dr-val"
+                  :class="{ 'state-name': row.key === 'stateLabel' }"
+                >
+                  {{ row.value }}
+                </span>
+              </div>
             </div>
-            <div class="detail-row">
-              <span class="dr-label">发现时间</span>
-              <span class="dr-val">{{ selectedNode.observedAt }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="dr-label">变化来源</span>
-              <span class="dr-val">{{ selectedNode.changeReason }}</span>
+            <div
+              v-for="row in stageDetailLocationRows"
+              :key="row.key"
+              class="detail-field detail-field-full"
+            >
+              <span class="dr-label">{{ row.label }}</span>
+              <span class="dr-val">{{ row.value }}</span>
             </div>
             <div class="workorder-group">
               <div class="workorder-group-title">
@@ -159,8 +164,49 @@
                   <span class="state-wo-time">{{ wo.submittedAt }}</span>
                 </div>
                 <div class="state-wo-title">{{ wo.title }}</div>
-                <div class="state-wo-meta">提交人：{{ wo.submittedBy }}</div>
-                <div class="state-wo-summary">{{ wo.resultSummary }}</div>
+                <div class="workorder-field-grid">
+                  <div
+                    v-for="row in workOrderGridRows(wo)"
+                    :key="`${wo.woNo}-${row.key ?? row.label}`"
+                    class="detail-field"
+                    :class="{ 'detail-field-full': row.layout === 'full' }"
+                  >
+                    <span class="dr-label">{{ row.label }}</span>
+                    <span class="dr-val">{{ row.value }}</span>
+                  </div>
+                </div>
+                <div
+                  v-for="row in workOrderRowsByKind(wo, 'location')"
+                  :key="`${wo.woNo}-${row.key ?? row.label}`"
+                  class="detail-field detail-field-full workorder-location-row"
+                >
+                  <span class="dr-label">{{ row.label }}</span>
+                  <span class="dr-val">{{ row.value }}</span>
+                </div>
+                <div
+                  v-if="workOrderRowsByKind(wo, 'media').length"
+                  class="workorder-media-grid"
+                >
+                  <div
+                    v-for="row in workOrderRowsByKind(wo, 'media')"
+                    :key="`${wo.woNo}-${row.key ?? row.label}`"
+                    class="detail-field media-field"
+                  >
+                    <span class="dr-label">{{ row.label }}</span>
+                    <img
+                      v-if="hasMediaValue(row.value)"
+                      class="media-preview"
+                      :src="mediaFileUrl(row.value)"
+                      :alt="row.label"
+                      loading="lazy"
+                      @click="openMediaDialog(row.label, row.value)"
+                    />
+                    <div v-else class="media-empty">
+                      <span class="media-empty-icon" aria-hidden="true">□</span>
+                      <span>暂无图片</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -203,6 +249,36 @@
           </div>
         </div>
         <div v-else class="no-coords">暂无有效坐标，无法计算群组病害分布。</div>
+      </div>
+    </div>
+
+    <div
+      v-if="mediaDialog.open"
+      class="media-dialog-mask"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="mediaDialog.title"
+      @click.self="closeMediaDialog"
+    >
+      <div class="media-dialog">
+        <div class="media-dialog-head">
+          <div class="media-dialog-title">{{ mediaDialog.title }}</div>
+          <button
+            type="button"
+            class="media-dialog-close"
+            aria-label="关闭图片预览"
+            @click="closeMediaDialog"
+          >
+            ×
+          </button>
+        </div>
+        <div class="media-dialog-body">
+          <img
+            class="media-dialog-image"
+            :src="mediaDialog.src"
+            :alt="mediaDialog.title"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -320,11 +396,63 @@ const current = computed<AlertPoint | null>(() => {
 const apiGroupedAlerts = ref<AlertPoint[] | null>(null);
 const apiGroupNumber = ref("");
 const apiSolveBundle = ref<LifecycleMockBundle | null>(null);
+const apiSelectGroupRowsByAlertId = ref<Record<number, DetectionRowRaw>>({});
+const apiSolveWorkOrdersByAlertId = ref<Record<number, LifecycleWoPayload[]>>({});
+const mediaDialog = ref({
+  open: false,
+  title: "",
+  src: "",
+});
+
+const FILE_SERVER_BASE_URL = normalizeUrlPrefix(
+  (import.meta.env.VITE_FILE_SERVER_BASE_URL as string | undefined) ??
+    "http://47.114.93.164:8082/",
+);
+
+function normalizeUrlPrefix(raw: string) {
+  const text = raw.trim();
+  if (!text) return "";
+  return text.endsWith("/") ? text : `${text}/`;
+}
+
+function hasMediaValue(value: string) {
+  return value.trim() !== "" && value.trim() !== "—";
+}
+
+function mediaFileUrl(value: string) {
+  const path = value.trim().replace(/^\/+/, "");
+  return `${FILE_SERVER_BASE_URL}${path}`;
+}
+
+function openMediaDialog(title: string, value: string) {
+  if (!hasMediaValue(value)) return;
+  mediaDialog.value = {
+    open: true,
+    title,
+    src: mediaFileUrl(value),
+  };
+}
+
+function closeMediaDialog() {
+  mediaDialog.value = {
+    open: false,
+    title: "",
+    src: "",
+  };
+}
+
+function onMediaDialogKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape" && mediaDialog.value.open) {
+    closeMediaDialog();
+  }
+}
 
 async function refreshQueryLifecycleData() {
   apiGroupedAlerts.value = null;
   apiGroupNumber.value = "";
   apiSolveBundle.value = null;
+  apiSelectGroupRowsByAlertId.value = {};
+  apiSolveWorkOrdersByAlertId.value = {};
   const c = current.value;
   if (!c || isOverlayMode.value || c.id === SYNTHETIC_OVERLAY_ALERT_ID) return;
   const y = c.defectYear?.trim();
@@ -336,11 +464,17 @@ async function refreshQueryLifecycleData() {
     const rawRows: DetectionRowRaw[] = [];
     if (g.source_item) rawRows.push(g.source_item);
     for (const it of g.items) rawRows.push(it);
+    const rowsByAlertId: Record<number, DetectionRowRaw> = {};
     const mapped = rawRows
-      .map((row) => mapDetectionRowToAlert(row))
+      .map((row) => {
+        const alert = mapDetectionRowToAlert(row);
+        if (alert) rowsByAlertId[alert.id] = row;
+        return alert;
+      })
       .filter((x): x is AlertPoint => x !== null);
     const ids = new Set(mapped.map((a) => a.id));
     if (!ids.has(c.id)) mapped.unshift({ ...c });
+    apiSelectGroupRowsByAlertId.value = rowsByAlertId;
     apiGroupedAlerts.value = [...mapped].sort(
       (a, b) => timeWeight(a.time) - timeWeight(b.time) || a.id - b.id,
     );
@@ -360,6 +494,10 @@ async function refreshQueryLifecycleData() {
       reviewRecords: sol.review_records,
       rectificationRecords: sol.rectification_records,
     });
+    apiSolveWorkOrdersByAlertId.value = {
+      ...apiSolveWorkOrdersByAlertId.value,
+      [c.id]: buildSolveWorkOrders(sol, n),
+    };
   } catch {
     apiSolveBundle.value = null;
   }
@@ -434,6 +572,201 @@ interface TimelineNode {
   alert: AlertPoint;
 }
 
+type DetailRowKind = "normal" | "location" | "media";
+type DetailField = {
+  key: string;
+  label: string;
+  value: string;
+  kind?: DetailRowKind;
+  layout?: "full";
+};
+type WorkOrderField = {
+  key: string;
+  label: string;
+  kind?: DetailRowKind;
+};
+
+const RECTIFICATION_WORK_ORDER_FIELDS = [
+  { key: "number", label: "编号" },
+  { key: "roadName", label: "道路名称" },
+  { key: "localStreet", label: "属地街道" },
+  { key: "diseaseType", label: "病害类型" },
+  { key: "rectificationMethod", label: "整改方式" },
+  { key: "rectificationDate", label: "整改日期" },
+  { key: "location", label: "具体位置", kind: "location" },
+  { key: "beforeRectificationPhoto", label: "整改前照片", kind: "media" },
+  { key: "duringRectificationPhoto", label: "整改中照片", kind: "media" },
+  { key: "afterRectificationPhoto", label: "整改后照片", kind: "media" },
+] as const;
+
+const REVIEW_WORK_ORDER_FIELDS = [
+  { key: "number", label: "编号" },
+  { key: "riskLevel", label: "风险等级" },
+  { key: "reviewOrder", label: "复测次序" },
+  { key: "reviewSituation", label: "复测情况" },
+  { key: "reviewer", label: "复测人员" },
+  { key: "reviewTime", label: "复测时间" },
+  { key: "locationDescription", label: "位置描述", kind: "location" },
+  { key: "radarImage", label: "雷达图像", kind: "media" },
+  { key: "reviewImage", label: "复测图像", kind: "media" },
+  { key: "electronicMap", label: "电子地图", kind: "media" },
+  { key: "sitePhoto", label: "现场照片", kind: "media" },
+] as const;
+
+function workOrderRows(
+  row: Record<string, unknown>,
+  fields: readonly WorkOrderField[],
+) {
+  return fields.map((f) => ({
+    key: f.key,
+    label: f.label,
+    value: detailValue(row[f.key]),
+    kind: "kind" in f ? f.kind : "normal",
+  }));
+}
+
+function rowsByKind(rows: readonly { kind?: DetailRowKind }[] | undefined, kind: DetailRowKind) {
+  return (rows ?? []).filter((row) => (row.kind ?? "normal") === kind);
+}
+
+function workOrderRowsByKind(
+  wo: LifecycleWoPayload,
+  kind: DetailRowKind,
+) {
+  return rowsByKind(wo.detailRows, kind);
+}
+
+function workOrderMetaRows(wo: LifecycleWoPayload): DetailField[] {
+  const rows: DetailField[] = [];
+  if (wo.category) {
+    rows.push({
+      key: "category",
+      label: "工单类别",
+      value: workOrderCategoryLabel(wo.category),
+    });
+  }
+  rows.push(
+    {
+      key: "submittedBy",
+      label: "提交人",
+      value: wo.submittedBy,
+    },
+    {
+      key: "resultSummary",
+      label: "处理摘要",
+      value: wo.resultSummary,
+    },
+  );
+  return rows;
+}
+
+function workOrderGridRows(wo: LifecycleWoPayload): DetailField[] {
+  const normalRows = workOrderRowsByKind(wo, "normal") as DetailField[];
+  const metaRows = workOrderMetaRows(wo);
+  if (wo.category !== "rectification") {
+    return [...metaRows, ...normalRows];
+  }
+
+  const rowsByKey = new Map(normalRows.map((row) => [row.key, row]));
+  const pick = (key: string) => rowsByKey.get(key);
+  const orderedRows = [
+    metaRows.find((row) => row.key === "category"),
+    metaRows.find((row) => row.key === "submittedBy"),
+    pick("number"),
+    pick("rectificationDate"),
+    pick("roadName"),
+    pick("localStreet"),
+    pick("diseaseType"),
+    pick("rectificationMethod"),
+  ].filter((row): row is DetailField => !!row);
+
+  return [
+    ...orderedRows,
+    {
+      key: "resultSummary",
+      label: "处理摘要",
+      value: wo.resultSummary,
+      layout: "full",
+    },
+  ];
+}
+
+function workOrderCategoryLabel(category: LifecycleWoPayload["category"]) {
+  if (category === "rectification") return "整改工单";
+  if (category === "review") return "复测工单";
+  return "模拟工单";
+}
+
+function buildRectificationWorkOrder(
+  row: Record<string, unknown>,
+  number: string,
+  index: number,
+): LifecycleWoPayload {
+  const method = detailValue(row.rectificationMethod);
+  const location = detailValue(row.location);
+  return {
+    woNo: `ZG-${number}-${index}`,
+    title: "整改工单",
+    submittedAt: detailValue(row.rectificationDate),
+    submittedBy: detailValue(row.localStreet),
+    resultSummary: location !== "—" ? `${method} · ${location}` : method,
+    category: "rectification",
+    detailRows: workOrderRows(row, RECTIFICATION_WORK_ORDER_FIELDS),
+  };
+}
+
+function buildReviewWorkOrder(
+  row: Record<string, unknown>,
+  number: string,
+  index: number,
+): LifecycleWoPayload {
+  return {
+    woNo: `FC-${number}-${index}`,
+    title: "复测工单",
+    submittedAt: detailValue(row.reviewTime),
+    submittedBy: detailValue(row.reviewer),
+    resultSummary: detailValue(row.reviewSituation),
+    category: "review",
+    detailRows: workOrderRows(row, REVIEW_WORK_ORDER_FIELDS),
+  };
+}
+
+function buildSolveWorkOrders(
+  sol: {
+    number: string;
+    rectification_records: Record<string, unknown>[];
+    review_records: Record<string, unknown>[];
+  },
+  fallbackNumber: string,
+): LifecycleWoPayload[] {
+  const number = sol.number || fallbackNumber;
+  return [
+    ...sol.rectification_records.map((row, i) =>
+      buildRectificationWorkOrder(row, number, i + 1),
+    ),
+    ...sol.review_records.map((row, i) =>
+      buildReviewWorkOrder(row, number, i + 1),
+    ),
+  ];
+}
+
+async function loadSolveWorkOrdersForAlert(alert: AlertPoint) {
+  if (alert.id === SYNTHETIC_OVERLAY_ALERT_ID) return;
+  if (alert.id in apiSolveWorkOrdersByAlertId.value) return;
+  const year = alert.defectYear?.trim();
+  const number = alert.defectNumber?.trim();
+  if (!year || !number) return;
+  try {
+    const sol = await querySolve({ year, number });
+    apiSolveWorkOrdersByAlertId.value = {
+      ...apiSolveWorkOrdersByAlertId.value,
+      [alert.id]: buildSolveWorkOrders(sol, number),
+    };
+  } catch {
+    /* solve 工单加载失败时保留原阶段工单 */
+  }
+}
+
 function lifecycleStateForAlert(alert: AlertPoint) {
   if (alert.id === SYNTHETIC_OVERLAY_ALERT_ID) {
     return getLifecycleMockForOverlay();
@@ -462,6 +795,8 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     const activeIdx = Math.min(pack.activePhaseIdx, pack.phases.length - 1);
     const phase = pack.phases[activeIdx] ?? pack.phases[0];
     const stateLabel = phase?.label ?? statusText(alert.status);
+    const hasApiWorkOrders = alert.id in apiSolveWorkOrdersByAlertId.value;
+    const apiWorkOrders = apiSolveWorkOrdersByAlertId.value[alert.id];
     return {
       key: `${alert.id}-${phase?.key ?? "phase"}`,
       title: `${alert.type} #${alert.id}`,
@@ -469,7 +804,7 @@ const timelineNodes = computed<TimelineNode[]>(() => {
       stateLabel,
       changeReason: phase?.changeReason ?? "由巡检发现后进入群组生命周期跟踪。",
       tags: nodeTags(alert, stateLabel, alert.id === c.id),
-      workOrders: phase?.workOrders ?? [],
+      workOrders: hasApiWorkOrders ? apiWorkOrders ?? [] : phase?.workOrders ?? [],
       alert,
     };
   });
@@ -496,6 +831,76 @@ function stageNodeClass(i: number) {
 const selectedNode = computed<TimelineNode>(() => {
   return timelineNodes.value[selStage.value] ?? timelineNodes.value[0]!;
 });
+
+watch(
+  () => selectedNode.value?.alert.id,
+  async () => {
+    const node = selectedNode.value;
+    if (!node) return;
+    await loadSolveWorkOrdersForAlert(node.alert);
+  },
+  { flush: "post" },
+);
+
+const SELECTGROUP_DETAIL_FIELDS = [
+  { key: "company", label: "公司" },
+  { key: "number", label: "编号" },
+  { key: "roadName", label: "道路名称" },
+  { key: "diseaseType", label: "病害类型" },
+  { key: "riskLevel", label: "风险等级" },
+  { key: "detectDate", label: "检测日期" },
+  { key: "planeSize", label: "平面尺寸" },
+  { key: "diseaseBottomDepth", label: "病害体底深" },
+  { key: "diseaseTopDepth", label: "病害体顶深" },
+  { key: "location", label: "具体位置", kind: "location" },
+] as const;
+
+function detailValue(v: unknown) {
+  if (v == null) return "—";
+  const text = String(v).trim();
+  return text || "—";
+}
+
+const selectedQueryDetailRows = computed<DetailField[]>(() => {
+  const node = selectedNode.value;
+  if (!node) return [];
+  const row = apiSelectGroupRowsByAlertId.value[node.alert.id];
+  if (!row) return [];
+  return SELECTGROUP_DETAIL_FIELDS.map((f) => ({
+    key: f.key,
+    label: f.label,
+    value: detailValue(row[f.key]),
+    kind: "kind" in f ? f.kind : "normal",
+  }));
+});
+
+const stageDetailBaseRows = computed<DetailField[]>(() => {
+  const node = selectedNode.value;
+  if (!node) return [];
+  return [
+    { key: "stateLabel", label: "病害状态", value: node.stateLabel },
+    {
+      key: "nodeObject",
+      label: "节点对象",
+      value: `#${node.alert.id} · ${node.alert.type}`,
+    },
+    { key: "observedAt", label: "发现时间", value: node.observedAt },
+    { key: "changeReason", label: "变化来源", value: node.changeReason },
+  ];
+});
+
+const stageDetailRows = computed<DetailField[]>(() => [
+  ...stageDetailBaseRows.value,
+  ...selectedQueryDetailRows.value,
+]);
+
+const stageDetailMainRows = computed(() =>
+  rowsByKind(stageDetailRows.value, "normal"),
+);
+
+const stageDetailLocationRows = computed(() =>
+  rowsByKind(stageDetailRows.value, "location"),
+);
 
 const distributionPoints = computed(() =>
   groupedAlerts.value.map((a) => ({
@@ -576,17 +981,21 @@ const impactLines = computed(() => {
   return lines;
 });
 
-function onSelectDistributionPoint(id: number) {
+async function onSelectDistributionPoint(id: number) {
   selectedDistributionId.value = id;
   const idx = timelineNodes.value.findIndex((node) => node.alert.id === id);
-  if (idx >= 0) selStage.value = idx;
+  if (idx < 0) return;
+  selStage.value = idx;
+  await loadSolveWorkOrdersForAlert(timelineNodes.value[idx]!.alert);
 }
 
 /** 时间轴节点点击：与右侧小地图选中点联动 */
-function onSelectStage(i: number) {
+async function onSelectStage(i: number) {
   selStage.value = i;
   const node = timelineNodes.value[i];
-  if (node) selectedDistributionId.value = node.alert.id;
+  if (!node) return;
+  selectedDistributionId.value = node.alert.id;
+  await loadSolveWorkOrdersForAlert(node.alert);
 }
 
 watch(
@@ -625,6 +1034,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onMediaDialogKeydown);
   chatStore.clearLifecyclePin();
   if (isOverlayMode.value) {
     mapOverlayStore.setFocusedOverlayForLifecycle(null);
@@ -632,6 +1042,7 @@ onBeforeUnmount(() => {
 });
 
 onMounted(async () => {
+  window.addEventListener("keydown", onMediaDialogKeydown);
   if (!alertStore.hasLoadedBaseAlerts || alertStore.alerts.length === 0) {
     await alertStore.loadRecheckAlerts();
   }
@@ -978,25 +1389,42 @@ function goWorkspace() {
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 80px;
 }
-.detail-row {
+.detail-grid,
+.workorder-field-grid,
+.workorder-media-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+.detail-field {
+  min-width: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(163, 177, 198, 0.18);
   font-size: 13px;
+}
+.detail-field-full,
+.workorder-location-row {
+  grid-column: 1 / -1;
 }
 .dr-label {
   color: #8a9aac;
-  min-width: 64px;
-  flex-shrink: 0;
   font-size: 12px;
+  line-height: 1.3;
 }
 .dr-val {
   color: var(--genshin-blue-dark);
   font-weight: 500;
-  flex: 1;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .state-name {
   font-size: 15px;
@@ -1015,13 +1443,15 @@ function goWorkspace() {
 }
 .state-wo {
   padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .state-wo-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 5px;
 }
 .state-wo-no {
   color: var(--genshin-blue);
@@ -1037,13 +1467,162 @@ function goWorkspace() {
   color: var(--genshin-blue-dark);
   font-weight: 700;
   font-size: 13px;
-  margin-bottom: 4px;
 }
-.state-wo-summary {
-  color: #5a6a7c;
+.workorder-media-grid {
+  padding-top: 2px;
+}
+.media-field {
+  background: rgba(74, 141, 183, 0.06);
+  border-color: rgba(74, 141, 183, 0.14);
+}
+.media-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(74, 141, 183, 0.16);
+  background: rgba(255, 255, 255, 0.55);
+  display: block;
+  cursor: zoom-in;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.media-preview:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(74, 141, 183, 0.18);
+}
+.media-empty {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  border: 1px dashed rgba(138, 154, 172, 0.42);
+  background: rgba(255, 255, 255, 0.36);
+  color: #8a9aac;
   font-size: 12px;
-  line-height: 1.5;
-  margin-top: 4px;
+  line-height: 1.2;
+}
+.media-empty-icon {
+  width: 24px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(138, 154, 172, 0.58);
+  border-radius: 4px;
+  color: transparent;
+  position: relative;
+}
+.media-empty-icon::before,
+.media-empty-icon::after {
+  content: "";
+  position: absolute;
+  background: rgba(138, 154, 172, 0.72);
+}
+.media-empty-icon::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  top: 4px;
+  right: 5px;
+}
+.media-empty-icon::after {
+  width: 12px;
+  height: 7px;
+  left: 5px;
+  bottom: 3px;
+  clip-path: polygon(0 100%, 42% 42%, 62% 68%, 78% 50%, 100% 100%);
+}
+.media-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(20, 31, 44, 0.58);
+  backdrop-filter: blur(3px);
+}
+.media-dialog {
+  width: min(960px, 100%);
+  max-height: min(86vh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--bg-color);
+  box-shadow:
+    0 24px 70px rgba(20, 31, 44, 0.32),
+    var(--neu-extrude-md);
+}
+.media-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--neu-stroke-faint);
+}
+.media-dialog-title {
+  min-width: 0;
+  color: var(--genshin-blue-dark);
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.media-dialog-close {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid var(--neu-stroke-faint);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.65);
+  color: #6b7a8c;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+.media-dialog-close:hover {
+  color: var(--genshin-blue);
+  box-shadow: var(--neu-extrude-sm);
+}
+.media-dialog-body {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  background: rgba(163, 177, 198, 0.08);
+}
+.media-dialog-image {
+  max-width: 100%;
+  max-height: calc(86vh - 92px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.65);
+  display: block;
+}
+@media (max-width: 1100px) {
+  .detail-grid,
+  .workorder-field-grid,
+  .workorder-media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .detail-grid,
+  .workorder-field-grid,
+  .workorder-media-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .stage-detail-enter-active,
 .stage-detail-leave-active {

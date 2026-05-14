@@ -10,6 +10,10 @@ function s(v: unknown): string {
   return t || "—";
 }
 
+function field(row: Record<string, unknown>, englishKey: string, chineseKey: string): unknown {
+  return row[englishKey] ?? row[chineseKey];
+}
+
 function wo(p: Partial<LifecycleWoPayload> & Pick<LifecycleWoPayload, "woNo" | "title">): LifecycleWoPayload {
   return {
     woNo: p.woNo,
@@ -53,8 +57,8 @@ export function buildLifecycleBundleFromSolve(params: {
   let idx = 0;
   for (const r of params.reviewRecords) {
     idx += 1;
-    const situation = s(r["复测情况"]);
-    const t = s(r["复测时间"]);
+    const situation = s(field(r, "reviewSituation", "复测情况"));
+    const t = s(field(r, "reviewTime", "复测时间"));
     phases.push({
       key: `review-${idx}`,
       label: "复测",
@@ -65,7 +69,7 @@ export function buildLifecycleBundleFromSolve(params: {
           woNo: `RC-${params.number}-${idx}`,
           title: "复测",
           submittedAt: t,
-          submittedBy: s(r["复测人员"]),
+          submittedBy: s(field(r, "reviewer", "复测人员")),
           resultSummary: situation,
         }),
       ],
@@ -75,9 +79,9 @@ export function buildLifecycleBundleFromSolve(params: {
   let ridx = 0;
   for (const r of params.rectificationRecords) {
     ridx += 1;
-    const way = s(r["整改方式"]);
-    const loc = s(r["具体位置"]);
-    const dt = s(r["整改日期"]);
+    const way = s(field(r, "rectificationMethod", "整改方式"));
+    const loc = s(field(r, "location", "具体位置"));
+    const dt = s(field(r, "rectificationDate", "整改日期"));
     phases.push({
       key: `rect-${ridx}`,
       label: way !== "—" ? way : "整改",
@@ -88,7 +92,7 @@ export function buildLifecycleBundleFromSolve(params: {
           woNo: `ZG-${params.number}-${ridx}`,
           title: "整改",
           submittedAt: dt,
-          submittedBy: s(r["属地街道"]),
+          submittedBy: s(field(r, "localStreet", "属地街道")),
           resultSummary:
             loc !== "—" ? `${way} · ${loc}` : way,
         }),
