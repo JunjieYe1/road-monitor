@@ -62,14 +62,14 @@
         <div class="neu-card status-card">
           <div class="report-history-head">
             <div class="genshin-subtitle sec-title">最近生成</div>
-            <button
+            <!-- <button
               type="button"
               class="report-reload-btn"
               :disabled="reportStore.isLoading"
               @click="reportStore.loadReports({ force: true })"
             >
-              重试
-            </button>
+              刷新
+            </button> -->
           </div>
           <div v-if="reportStore.isLoading" class="panel-empty">
             正在加载历史报告...
@@ -188,7 +188,7 @@
       <!-- 全景洞察 -->
       <div v-else-if="mode === 'insight'" key="insight" class="panel-content">
         <StatCard
-          label="告警总数"
+          label="病害总数"
           :value="alertStore.totalCount"
           unit="处"
           :sub="severityItems"

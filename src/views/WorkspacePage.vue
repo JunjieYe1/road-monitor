@@ -59,8 +59,8 @@
     <main
       class="main-content"
       :class="{
-        'chat-wide': chatWide,
-        'is-lifecycle': isDefectLifecycleRoute,
+        'chat-wide': chatWide && !hideRightChatForCanvas,
+        'no-right-chat': hideRightChatForCanvas,
       }"
     >
       <LeftPanel v-if="!isDefectLifecycleRoute" class="left-panel" />
@@ -70,7 +70,7 @@
       />
       <Canvas v-if="!isDefectLifecycleRoute" class="center-panel" />
       <RightChat
-        v-if="!isDefectLifecycleRoute"
+        v-if="!hideRightChatForCanvas"
         v-model:wide="chatWide"
         class="right-panel"
       />
@@ -102,6 +102,16 @@ const uiStore = useUiStore();
 
 const isDefectLifecycleRoute = computed(
   () => route.name === "workspace-defect",
+);
+
+const activeCanvasType = computed(
+  () => canvasStore.getActiveTab()?.type ?? null,
+);
+
+const hideRightChatForCanvas = computed(
+  () =>
+    !isDefectLifecycleRoute.value &&
+    (activeCanvasType.value === "collect" || activeCanvasType.value === "report"),
 );
 
 /** 对话栏加宽：隐藏左侧栏，对话区约占半屏 */
@@ -352,12 +362,9 @@ onMounted(async () => {
 .lifecycle-center {
   min-width: 0;
 }
-.main-content.is-lifecycle {
-  gap: 0;
-}
-.main-content.is-lifecycle .lifecycle-center {
-  flex: 1 1 100%;
-  width: 100%;
+.main-content.no-right-chat .center-panel {
+  flex: 1 1 auto;
+  width: auto;
   max-width: none;
 }
 .right-panel {

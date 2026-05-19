@@ -20,7 +20,6 @@ import {
 } from "../api/agentClient";
 import {
   CHAT_AGENTS,
-  DEFAULT_CHAT_AGENT_ID,
   getChatAgentById,
   getChatAgentSkillsList,
 } from "../config/chatAgents";
@@ -124,44 +123,19 @@ function buildAgentRoleContext(agent: {
 export const useChatStore = defineStore("chat", () => {
   const alertStore = useAlertStore();
   let mapControlEventSeq = 0;
-  const activeChatAgentId = ref(DEFAULT_CHAT_AGENT_ID);
-
-  function welcomeMessages(): ChatMessage[] {
-    const agent =
-      getChatAgentById(activeChatAgentId.value) ?? CHAT_AGENTS[0]!;
-    return [
-      {
-        id: 1,
-        role: "assistant",
-        content: agent.welcome,
-        time: formatLocaleTimeHm(),
-      },
-    ];
-  }
+  const activeChatAgentId = ref('');
 
   function setActiveChatAgent(id: string) {
     const next = getChatAgentById(id);
     if (!next) return;
-    const prev = getChatAgentById(activeChatAgentId.value);
     activeChatAgentId.value = id;
-    if (
-      !activeConversationKey.value &&
-      messages.value.length === 1 &&
-      messages.value[0]?.role === "assistant"
-    ) {
-      const onlyMsg = messages.value[0];
-      const prevWelcome = prev?.welcome;
-      if (!prevWelcome || onlyMsg.content === prevWelcome) {
-        onlyMsg.content = next.welcome;
-      }
-    }
   }
 
   const activeChatAgent = computed(
     () => getChatAgentById(activeChatAgentId.value) ?? CHAT_AGENTS[0]!,
   );
 
-  const messages = ref<ChatMessage[]>(welcomeMessages());
+  const messages = ref<ChatMessage[]>([]);
   let nextId = 2;
   const isLoading = ref(false);
 
@@ -263,10 +237,10 @@ export const useChatStore = defineStore("chat", () => {
         return mapApiMessage(m, idNum);
       });
       nextId = maxId + 1;
-      messages.value = mapped.length ? mapped : welcomeMessages();
+      messages.value = mapped.length ? mapped : [];
       if (!mapped.length) nextId = 2;
     } catch {
-      messages.value = welcomeMessages();
+      messages.value = [];
       nextId = 2;
     }
   }
@@ -283,7 +257,7 @@ export const useChatStore = defineStore("chat", () => {
   function startNewChat(refreshList = true) {
     activeConversationKey.value = null;
     activeThreadShort.value = `user_session_${Date.now()}`;
-    messages.value = welcomeMessages();
+    messages.value = [];
     nextId = 2;
     if (refreshList) void refreshConversations();
   }
@@ -296,7 +270,7 @@ export const useChatStore = defineStore("chat", () => {
     }
     messages.value = messages.value.filter((m) => m.id !== id);
     if (messages.value.length === 0) {
-      messages.value = welcomeMessages();
+      messages.value = [];
       nextId = 2;
     }
   }
@@ -707,7 +681,7 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   function clearMessages() {
-    messages.value = welcomeMessages();
+    messages.value = [];
     nextId = 2;
   }
 

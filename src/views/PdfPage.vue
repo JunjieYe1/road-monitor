@@ -82,7 +82,7 @@
 
         <div v-if="documentsError" class="kb-state kb-error">
           <span>{{ documentsError }}</span>
-          <button type="button" @click="loadDocuments(documentPage)">重试</button>
+          <button type="button" @click="loadDocuments(documentPage)">刷新</button>
         </div>
         <div v-else-if="documentsLoading && !displayedKbList.length" class="kb-state">
           正在加载知识库文档...
@@ -338,7 +338,7 @@
 
           <div v-if="chunksError" class="kb-state kb-error">
             <span>{{ chunksError }}</span>
-            <button type="button" @click="loadChunks(chunkPage)">重试</button>
+            <button type="button" @click="loadChunks(chunkPage)">刷新</button>
           </div>
           <div v-else-if="chunksLoading && !chunkList.length" class="kb-state">
             正在加载文档切片...

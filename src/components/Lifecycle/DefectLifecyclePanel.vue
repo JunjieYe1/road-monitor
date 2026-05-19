@@ -78,7 +78,7 @@
         <div class="info-right">
           <div class="info-meta">
             <template v-if="groupSource === 'api' && apiGroupNumber">
-              病害群组编号：{{ apiGroupNumber }} · {{ groupedAlerts.length }} 个点
+              病害群组：{{ groupedAlerts.length }} 个点
             </template>
             <template v-else>
               群组范围：{{ current!.district }} · 半径 {{ GROUP_RADIUS_METERS }}m
@@ -150,6 +150,30 @@
               <span class="dr-label">{{ row.label }}</span>
               <span class="dr-val">{{ row.value }}</span>
             </div>
+            <div
+              v-if="stageDetailMediaRows.length"
+              class="workorder-media-grid"
+            >
+              <div
+                v-for="row in stageDetailMediaRows"
+                :key="row.key"
+                class="detail-field media-field"
+              >
+                <span class="dr-label">{{ row.label }}</span>
+                <img
+                  v-if="hasMediaValue(row.value)"
+                  class="media-preview"
+                  :src="mediaFileUrl(row.value)"
+                  :alt="row.label"
+                  loading="lazy"
+                  @click="openMediaDialog(row.label, row.value)"
+                />
+                <div v-else class="media-empty">
+                  <span class="media-empty-icon" aria-hidden="true">□</span>
+                  <span>暂无图片</span>
+                </div>
+              </div>
+            </div>
             <div class="workorder-group">
               <div class="workorder-group-title">
                 关联工单（{{ selectedNode.workOrders.length }}）
@@ -160,10 +184,10 @@
                 class="state-wo neu-card-sm"
               >
                 <div class="state-wo-head">
-                  <span class="state-wo-no">{{ wo.woNo }}</span>
+                  <span class="state-wo-no">{{ workOrderCategoryLabel(wo.category) }}</span>
                   <span class="state-wo-time">{{ wo.submittedAt }}</span>
                 </div>
-                <div class="state-wo-title">{{ wo.title }}</div>
+                <!-- <div class="state-wo-title">{{ wo.title }}</div> -->
                 <div class="workorder-field-grid">
                   <div
                     v-for="row in workOrderGridRows(wo)"
@@ -556,7 +580,7 @@ const groupTitle = computed(() => {
   const c = current.value;
   if (!c) return "病害生命周期";
   if (groupSource.value === "api" && apiGroupNumber.value) {
-    return `${apiGroupNumber.value} · ${groupedAlerts.value.length}个病害`;
+    return `${groupedAlerts.value.length}个病害`;
   }
   return `${c.district} 群组 · ${groupedAlerts.value.length}个病害`;
 });
@@ -587,7 +611,6 @@ type WorkOrderField = {
 };
 
 const RECTIFICATION_WORK_ORDER_FIELDS = [
-  { key: "number", label: "编号" },
   { key: "roadName", label: "道路名称" },
   { key: "localStreet", label: "属地街道" },
   { key: "diseaseType", label: "病害类型" },
@@ -600,7 +623,6 @@ const RECTIFICATION_WORK_ORDER_FIELDS = [
 ] as const;
 
 const REVIEW_WORK_ORDER_FIELDS = [
-  { key: "number", label: "编号" },
   { key: "riskLevel", label: "风险等级" },
   { key: "reviewOrder", label: "复测次序" },
   { key: "reviewSituation", label: "复测情况" },
@@ -672,23 +694,15 @@ function workOrderGridRows(wo: LifecycleWoPayload): DetailField[] {
   const orderedRows = [
     metaRows.find((row) => row.key === "category"),
     metaRows.find((row) => row.key === "submittedBy"),
-    pick("number"),
     pick("rectificationDate"),
     pick("roadName"),
     pick("localStreet"),
     pick("diseaseType"),
     pick("rectificationMethod"),
+    metaRows.find((row) => row.key === "resultSummary"),
   ].filter((row): row is DetailField => !!row);
 
-  return [
-    ...orderedRows,
-    {
-      key: "resultSummary",
-      label: "处理摘要",
-      value: wo.resultSummary,
-      layout: "full",
-    },
-  ];
+  return orderedRows;
 }
 
 function workOrderCategoryLabel(category: LifecycleWoPayload["category"]) {
@@ -799,7 +813,7 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     const apiWorkOrders = apiSolveWorkOrdersByAlertId.value[alert.id];
     return {
       key: `${alert.id}-${phase?.key ?? "phase"}`,
-      title: `${alert.type} #${alert.id}`,
+      title: alert.type,
       observedAt: alert.time || phase?.observedAt || "未知",
       stateLabel,
       changeReason: phase?.changeReason ?? "由巡检发现后进入群组生命周期跟踪。",
@@ -844,7 +858,6 @@ watch(
 
 const SELECTGROUP_DETAIL_FIELDS = [
   { key: "company", label: "公司" },
-  { key: "number", label: "编号" },
   { key: "roadName", label: "道路名称" },
   { key: "diseaseType", label: "病害类型" },
   { key: "riskLevel", label: "风险等级" },
@@ -853,6 +866,11 @@ const SELECTGROUP_DETAIL_FIELDS = [
   { key: "diseaseBottomDepth", label: "病害体底深" },
   { key: "diseaseTopDepth", label: "病害体顶深" },
   { key: "location", label: "具体位置", kind: "location" },
+  { key: "radarImage", label: "雷达图像", kind: "media" },
+  { key: "electronicMap", label: "电子地图", kind: "media" },
+  { key: "sitePhoto", label: "现场照片", kind: "media" },
+  { key: "verificationPhoto", label: "验证照片", kind: "media" },
+  { key: "nearbyUndergroundPipelineMap", label: "隐患周边地下管网图", kind: "media" },
 ] as const;
 
 function detailValue(v: unknown) {
@@ -879,11 +897,7 @@ const stageDetailBaseRows = computed<DetailField[]>(() => {
   if (!node) return [];
   return [
     { key: "stateLabel", label: "病害状态", value: node.stateLabel },
-    {
-      key: "nodeObject",
-      label: "节点对象",
-      value: `#${node.alert.id} · ${node.alert.type}`,
-    },
+    { key: "alertType", label: "病害类型", value: node.alert.type },
     { key: "observedAt", label: "发现时间", value: node.observedAt },
     { key: "changeReason", label: "变化来源", value: node.changeReason },
   ];
@@ -900,6 +914,10 @@ const stageDetailMainRows = computed(() =>
 
 const stageDetailLocationRows = computed(() =>
   rowsByKind(stageDetailRows.value, "location"),
+);
+
+const stageDetailMediaRows = computed(() =>
+  rowsByKind(stageDetailRows.value, "media"),
 );
 
 const distributionPoints = computed(() =>
@@ -927,7 +945,7 @@ const nearestDistanceM = computed(() => {
 
 const analyzeSubtitle = computed(() =>
   groupSource.value === "api"
-    ? "群组以检测表「对应病害群组编号」为准；结合各节点状态与坐标分布做综合判断"
+    ? "群组以检测表对应关系为准；结合各节点状态与坐标分布做综合判断"
     : "基于同区域+邻近距离分组，对生命周期节点和群组风险进行综合判断",
 );
 
@@ -945,7 +963,7 @@ const groupAnalytics = computed(() => {
 
 const impactFootnote = computed(() =>
   groupSource.value === "api"
-    ? "群组关系来自检测表「对应病害群组编号」（query/selectgroup）；下方邻域句为距离规则补充。"
+    ? "群组关系来自检测表对应关系；下方邻域句为距离规则补充。"
     : "基于演示规则生成，用于页面交互验证。",
 );
 
@@ -956,7 +974,7 @@ const impactLines = computed(() => {
   const lines: string[] = [];
   if (groupSource.value === "api" && apiGroupNumber.value) {
     lines.push(
-      `当前群组与检测表「对应病害群组编号」一致：${apiGroupNumber.value}，共 ${rows.length} 个病害对象。`,
+      `当前群组与检测表对应关系一致，共 ${rows.length} 个病害对象。`,
     );
   } else {
     lines.push(
@@ -1396,7 +1414,7 @@ function goWorkspace() {
 .workorder-field-grid,
 .workorder-media-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px 12px;
 }
 .detail-field {

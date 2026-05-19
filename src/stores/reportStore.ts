@@ -3,8 +3,11 @@ import { computed, ref } from "vue";
 import {
   apiDeleteReport,
   apiListReports,
+  streamReport,
   type ReportListItem,
+  type ReportStreamEvent,
 } from "../api/report";
+import { formatLocaleMdHm } from "../utils/localeFormat";
 
 export type ReportType = "annual" | "patrol" | "rectify" | "recheck";
 
@@ -25,6 +28,13 @@ export interface ReportHistoryItem {
   username?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+export interface GenerateOptions {
+  year: string;
+  region: string;
+  reportType: ReportType;
+  reportTitle: string;
 }
 
 function formatReportTime(value?: string | null): string {
@@ -65,6 +75,19 @@ export const useReportStore = defineStore("report", () => {
   const isLoading = ref(false);
   const error = ref("");
   const hasLoaded = ref(false);
+
+  // 报告生成状态（跨 tab 持久）
+  const isGenerating = ref(false);
+  const stepLog = ref<string[]>([]);
+  const generated = ref(false);
+  const genTime = ref("");
+  const filename = ref("");
+  const downloadUrl = ref("");
+  const errorMessage = ref("");
+  const errorTraceback = ref("");
+  const persistError = ref("");
+  const isAddingHistory = ref(false);
+  const controller = ref<AbortController | null>(null);
 
   const activeHistory = computed(
     () =>
@@ -127,6 +150,108 @@ export const useReportStore = defineStore("report", () => {
     }
   }
 
+  // ── 报告生成（跨 tab 持久） ──
+
+  function abortCurrentRequest() {
+    controller.value?.abort();
+    controller.value = null;
+  }
+
+  function resetGenerateState() {
+    isGenerating.value = false;
+    stepLog.value = [];
+    generated.value = false;
+    genTime.value = "";
+    filename.value = "";
+    downloadUrl.value = "";
+    errorMessage.value = "";
+    errorTraceback.value = "";
+    persistError.value = "";
+  }
+
+  function normalizeProgressText(content: string): string {
+    const trimmed = content.trim();
+    if (!trimmed) return "后端正在处理报告任务";
+    const title = trimmed.match(/title\s*:\s*(['"])(.*?)\1/s)?.[2]?.trim();
+    const description = trimmed
+      .match(/description\s*:\s*(['"])(.*?)\1/s)?.[2]
+      ?.trim();
+    if (title && description) return `${title} ${description}`;
+    if (title) return title;
+    return trimmed;
+  }
+
+  function updateCurrentToken(content: string) {
+    const text = normalizeProgressText(content);
+    if (stepLog.value[stepLog.value.length - 1] !== text) {
+      stepLog.value.push(text);
+    }
+  }
+
+  async function startGenerate(options: GenerateOptions) {
+    abortCurrentRequest();
+    resetGenerateState();
+    isGenerating.value = true;
+    stepLog.value = ["已提交生成任务，等待后端返回进度..."];
+
+    const nextController = new AbortController();
+    controller.value = nextController;
+
+    function handleReportEvent(event: ReportStreamEvent) {
+      if (event.kind === "token") {
+        updateCurrentToken(event.content);
+        return;
+      }
+      if (event.kind === "done") {
+        isAddingHistory.value = true;
+        filename.value = event.filename;
+        downloadUrl.value = event.downloadUrl;
+        persistError.value = event.persistError ?? "";
+        genTime.value = formatLocaleMdHm();
+        generated.value = true;
+        isGenerating.value = false;
+
+        upsertHistoryFromDone({
+          reportId: event.reportId,
+          type: options.reportType,
+          title: options.reportTitle,
+          generatedAt: genTime.value,
+          content: `生成完成：${event.filename}`,
+          filename: event.filename,
+          downloadUrl: event.downloadUrl,
+          year: options.year,
+          region: options.region,
+        });
+        loadReports({ force: true }).finally(() => {
+          isAddingHistory.value = false;
+        });
+        return;
+      }
+      errorMessage.value = event.message;
+      errorTraceback.value = event.traceback ?? "";
+      generated.value = false;
+      isGenerating.value = false;
+    }
+
+    try {
+      await streamReport(
+        { year: options.year, region: options.region, stream_tokens: true },
+        handleReportEvent,
+        { signal: nextController.signal },
+      );
+    } catch (error) {
+      if (nextController.signal.aborted) return;
+      const message = error instanceof Error ? error.message : "报告生成失败";
+      errorMessage.value = message;
+      errorTraceback.value = "";
+      generated.value = false;
+      isGenerating.value = false;
+    } finally {
+      if (controller.value === nextController) controller.value = null;
+      if (!downloadUrl.value && !errorMessage.value) isGenerating.value = false;
+    }
+  }
+
   return {
     histories,
     activeHistoryId,
@@ -139,5 +264,18 @@ export const useReportStore = defineStore("report", () => {
     selectHistory,
     loadReports,
     deleteReport,
+    isGenerating,
+    stepLog,
+    generated,
+    genTime,
+    filename,
+    downloadUrl,
+    errorMessage,
+    errorTraceback,
+    persistError,
+    isAddingHistory,
+    abortCurrentRequest,
+    resetGenerateState,
+    startGenerate,
   };
 });

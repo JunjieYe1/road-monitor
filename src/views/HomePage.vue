@@ -102,7 +102,7 @@ const entries = [
     label: "数据入仓",
     desc: "PDF报告解析 · 知识库管理",
     mode: "collect" as AgentMode,
-    isExternal: true,
+    view: "collect" as CanvasViewType,
     highlight: true,
   },
   {
@@ -198,10 +198,6 @@ function handleSearch() {
 
 function handleEntry(entry: (typeof entries)[0]) {
   if (entry.disabled) return;
-  if ((entry as any).isExternal) {
-    router.push("/pdf");
-    return;
-  }
   canvasStore.setAgentMode(entry.mode);
   if (entry.view && entry.view !== "map" && !isViewOpenDisabled(entry.view))
     canvasStore.pushTab({ type: entry.view });

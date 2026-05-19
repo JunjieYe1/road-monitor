@@ -156,14 +156,31 @@
       </button>
     </div>
 
-    <!-- 虚拟形象区：多智能体转盘 -->
+    <!-- 智能专家组：直接选择 -->
     <div class="avatar-section">
-      <div class="genshin-subtitle avatar-expert-title">智能专家组</div>
-      <AgentPersonaCarousel class="avatar-carousel-block" />
+      <div class="genshin-subtitle avatar-expert-title">在线专家</div>
+      <div class="expert-row">
+        <button
+          v-for="agent in expertAgents"
+          :key="agent.id"
+          class="expert-card"
+          :class="{ active: chatStore.activeChatAgentId === agent.id }"
+          :disabled="chatStore.isLoading"
+          @click="onExpertClick(agent.id)"
+        >
+          <ChatAgentIcon :kind="agent.iconKind" variant="mini" />
+          <span class="expert-name">{{ agent.name }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- 对话区：消息多，始终可纵向滚动 -->
     <div class="chat-body u-scrollbar-hidden" ref="chatBody">
+      <!-- 欢迎横幅（无消息时显示） -->
+      <div v-if="!chatStore.messages.length" class="welcome-banner">
+        <div class="welcome-title">欢迎使用城市道路地下病害服务平台</div>
+        <div class="welcome-hint">点击上方专家开始对话</div>
+      </div>
       <div
         v-for="msg in chatStore.messages"
         :key="msg.id"
@@ -385,22 +402,6 @@
       </div>
     </div>
 
-    <!-- 快捷按钮 -->
-    <div class="quick-section">
-      <div class="quick-label">快捷指令</div>
-      <div class="quick-btns">
-        <button
-          v-for="q in agentQuickQuestions"
-          :key="q"
-          class="quick-btn"
-          :disabled="chatStore.isLoading"
-          @click="chatStore.sendMessage(q)"
-        >
-          {{ q }}
-        </button>
-      </div>
-    </div>
-
     <!-- 输入区 -->
     <div class="input-area">
       <!-- 点位上下文徽章 -->
@@ -545,7 +546,7 @@ import {
   type CanvasViewType,
 } from "../../stores/canvasStore";
 import SeverityBadge from "../common/SeverityBadge.vue";
-import AgentPersonaCarousel from "./AgentPersonaCarousel.vue";
+import { CHAT_AGENTS } from "../../config/chatAgents";
 import ChatAgentIcon from "./ChatAgentIcon.vue";
 import { renderChatMarkdown } from "../../utils/renderMarkdown";
 import { useUiStore } from "../../stores/uiStore";
@@ -845,9 +846,20 @@ const mentionItems = computed(() =>
   mentionItemsSource.filter((i) => !isViewOpenDisabled(i.type)),
 );
 
-const agentQuickQuestions = computed(
-  () => chatStore.activeChatAgent.quickQuestions,
-);
+const expertAgents = computed(() => CHAT_AGENTS);
+
+const presetMessages: Record<string, string> = {
+  luxiaoxi: "帮我列出最近一年上城区病害最多的5条道路",
+  luxiaogui: "请告诉最近一年上城区高风险的病害情况分布",
+  luxiaoce: "请帮我查询道路最近一年的检测情况和具体病害问题",
+};
+
+function onExpertClick(id: string) {
+  if (chatStore.isLoading) return;
+  chatStore.setActiveChatAgent(id);
+  const msg = presetMessages[id];
+  if (msg) chatStore.sendMessage(msg);
+}
 
 const inputContextAlert = computed(
   () => chatStore.attachedAlert ?? chatStore.lifecyclePinnedAlert,
@@ -1018,9 +1030,82 @@ watch(selectedMentions, () => updateInputMultiline(), { deep: true });
   font-size: 14px;
 
 }
-.avatar-carousel-block {
-  width: 100%;
+.expert-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding: 6px 0 10px;
+}
+.expert-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--neu-border-highlight);
+  background: linear-gradient(var(--neu-angle), var(--neu-convex-from), var(--neu-convex-mid));
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--neu-extrude-sm);
+  flex: 1;
+  min-width: 0;
+  max-width: 90px;
+  font-family: var(--font-ui);
+}
+.expert-card:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--genshin-gold-light), var(--genshin-gold));
+  border-color: rgba(255,255,255,0.45);
+}
+.expert-card:hover:not(:disabled) .expert-name {
+  color: white;
+}
+.expert-card.active {
+  background: linear-gradient(135deg, var(--genshin-gold-light), var(--genshin-gold));
+  border-color: rgba(255,255,255,0.5);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.3) inset;
+}
+.expert-card.active .expert-name {
+  color: white;
+}
+.expert-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.expert-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--genshin-blue-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   max-width: 100%;
+  line-height: 1.3;
+}
+
+/* 欢迎横幅 */
+.welcome-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 1;
+  padding: 24px 16px;
+  text-align: center;
+  min-height: 160px;
+}
+.welcome-title {
+  font-family: "Noto Serif SC", serif;
+  font-size: 16px;
+  color: var(--genshin-blue-dark);
+  line-height: 1.5;
+  text-align: center;
+}
+.welcome-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 /* 对话区 */
@@ -1976,53 +2061,6 @@ button.bubble-rag-link {
   color: #fff;
   background: rgba(224, 112, 112, 0.35);
   border-color: rgba(255, 255, 255, 0.4);
-}
-
-/* 快捷按钮 */
-.quick-section {
-  flex-shrink: 0;
-}
-.quick-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-  padding-left: 2px;
-}
-.quick-btns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.quick-btn {
-  font-size: 11px;
-  padding: 5px 10px;
-  border-radius: 12px;
-  border: 1px solid var(--neu-border-highlight);
-  cursor: pointer;
-  background: linear-gradient(
-    var(--neu-angle),
-    var(--neu-convex-from),
-    var(--neu-convex-mid)
-  );
-  color: var(--genshin-blue);
-  transition: all 0.2s;
-  font-family: var(--font-ui);
-  box-shadow: var(--neu-extrude-sm);
-  line-height: 1.3;
-  text-align: left;
-}
-.quick-btn:hover:not(:disabled) {
-  background: linear-gradient(
-    135deg,
-    var(--genshin-gold-light),
-    var(--genshin-gold)
-  );
-  color: white;
-  border-color: rgba(255, 255, 255, 0.45);
-}
-.quick-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 /* 输入区 */

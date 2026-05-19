@@ -107,7 +107,7 @@ const gTransform = computed(() =>
       <circle cx="45" cy="42" r="1" fill="white" />
       <circle cx="59" cy="42" r="1" fill="white" />
 
-      <!-- 路小规：圆框眼镜（压在眼白之上） -->
+      <!-- 路小安：圆框眼镜（压在眼白之上） -->
       <g v-if="kind === 'luxiaogui'">
         <rect
           x="35.5"
@@ -158,7 +158,7 @@ const gTransform = computed(() =>
         stroke-linecap="round"
       />
 
-      <!-- 路小析：数据巡察灯冠 + 波纹 -->
+      <!-- 路探长：数据巡察灯冠 + 波纹 -->
       <template v-if="kind === 'luxiaoxi'">
         <path
           d="M39,11 Q50,5 61,11"
@@ -184,7 +184,7 @@ const gTransform = computed(() =>
         <circle cx="50" cy="19.5" r="3.4" :fill="`url(#${uid}-accentGrad)`" />
       </template>
 
-      <!-- 路小规：学位帽 -->
+      <!-- 路小安：学位帽 -->
       <template v-else-if="kind === 'luxiaogui'">
         <rect
           x="36"
@@ -214,7 +214,7 @@ const gTransform = computed(() =>
         <circle cx="62" cy="22" r="2.2" :fill="`url(#${uid}-accentGrad)`" opacity="0.95" />
       </template>
 
-      <!-- 路小策：硬檐三角帽 + 徽标（收紧高度，避免压住眉眼） -->
+      <!-- 路查查：硬檐三角帽 + 徽标（收紧高度，避免压住眉眼） -->
       <template v-else-if="kind === 'luxiaoce'">
         <path
           d="M33 33 L50 15 L67 33 Q50 29 33 33Z"

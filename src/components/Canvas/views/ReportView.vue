@@ -119,11 +119,18 @@
             <div class="spin-ring"></div>
             <span class="gen-label-text">AI 生成中</span>
           </div>
-          <div class="stream-frame">
-            {{ currentTokenText || "已提交生成任务，等待后端返回进度..." }}
-          </div>
           <div class="gen-progress-bar" aria-label="报告生成进度">
             <div class="gen-progress-fill"></div>
+          </div>
+          <div class="step-list">
+            <div
+              v-for="(step, idx) in stepLog"
+              :key="idx"
+              class="step-item"
+            >
+              <span class="step-dot" aria-hidden="true"></span>
+              <span class="step-text">{{ step }}</span>
+            </div>
           </div>
         </section>
 
@@ -176,13 +183,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { streamReport, type ReportStreamEvent } from "../../../api/report";
+import { computed, onMounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
 import { useReportStore, type ReportType } from "../../../stores/reportStore";
-import { formatLocaleMdHm } from "../../../utils/localeFormat";
 import ViewToolbar from "../../common/ViewToolbar.vue";
 
 const reportStore = useReportStore();
+const {
+  isGenerating, stepLog, generated, genTime, filename, downloadUrl,
+  errorMessage, errorTraceback, persistError,
+} = storeToRefs(reportStore);
 
 const yearOptions = ["2023", "2024", "2025"] as const;
 const regionOptions = ["上城区"] as const;
@@ -197,17 +207,6 @@ const reportTypes = [
 const selectedType = ref<ReportType>("annual");
 const selectedYear = ref<(typeof yearOptions)[number]>("2024");
 const selectedRegion = ref<(typeof regionOptions)[number]>("上城区");
-const generated = ref(false);
-const isGenerating = ref(false);
-const genTime = ref("");
-const filename = ref("");
-const downloadUrl = ref("");
-const errorMessage = ref("");
-const errorTraceback = ref("");
-const currentTokenText = ref("");
-const persistError = ref("");
-const controller = ref<AbortController | null>(null);
-let isAddingHistory = false;
 
 const REPORT_TITLES: Record<Exclude<ReportType, "annual">, string> = {
   patrol: "2024年度路面巡检情况报告",
@@ -227,121 +226,17 @@ const canGenerate = computed(
   () => Boolean(selectedYear.value) && Boolean(selectedRegion.value),
 );
 
-function abortCurrentRequest() {
-  controller.value?.abort();
-  controller.value = null;
-}
-
-function resetResultState() {
-  generated.value = false;
-  genTime.value = "";
-  filename.value = "";
-  downloadUrl.value = "";
-  errorMessage.value = "";
-  errorTraceback.value = "";
-  currentTokenText.value = "";
-  persistError.value = "";
-}
-
-function normalizeProgressText(content: string): string {
-  const trimmed = content.trim();
-  if (!trimmed) return "后端正在处理报告任务";
-
-  const title = trimmed.match(/title\s*:\s*(['"])(.*?)\1/s)?.[2]?.trim();
-  const description = trimmed
-    .match(/description\s*:\s*(['"])(.*?)\1/s)?.[2]
-    ?.trim();
-
-  if (title && description) return `${title} ${description}`;
-  if (title) return title;
-  return trimmed;
-}
-
-function updateCurrentToken(content: string) {
-  currentTokenText.value = normalizeProgressText(content);
-}
-
-function applyDoneEvent(event: Extract<ReportStreamEvent, { kind: "done" }>) {
-  filename.value = event.filename;
-  downloadUrl.value = event.downloadUrl;
-  persistError.value = event.persistError ?? "";
-  genTime.value = formatLocaleMdHm();
-  generated.value = true;
-  isGenerating.value = false;
-
-  const content = `生成完成：${event.filename}`;
-  isAddingHistory = true;
-  reportStore.upsertHistoryFromDone({
-    reportId: event.reportId,
-    type: selectedType.value,
-    title: reportTitle.value,
-    generatedAt: genTime.value,
-    content,
-    filename: event.filename,
-    downloadUrl: event.downloadUrl,
-    year: selectedYear.value,
-    region: selectedRegion.value,
-  });
-  reportStore.loadReports({ force: true }).finally(() => {
-    isAddingHistory = false;
-  });
-}
-
-function applyError(message: string, traceback?: string) {
-  errorMessage.value = message;
-  errorTraceback.value = traceback ?? "";
-  generated.value = false;
-  isGenerating.value = false;
-}
-
-function handleReportEvent(event: ReportStreamEvent) {
-  if (event.kind === "token") {
-    updateCurrentToken(event.content);
-    return;
-  }
-  if (event.kind === "done") {
-    applyDoneEvent(event);
-    return;
-  }
-  applyError(event.message, event.traceback);
-}
-
 async function startGenerate() {
   if (!canGenerate.value) {
-    applyError("请选择报告时间和地区");
+    reportStore.errorMessage = "请选择报告时间和地区";
     return;
   }
-  abortCurrentRequest();
-  resetResultState();
-  selectedType.value = "annual";
-  isGenerating.value = true;
-  currentTokenText.value = "已提交生成任务，等待后端返回进度...";
-
-  const nextController = new AbortController();
-  controller.value = nextController;
-
-  try {
-    await streamReport(
-      {
-        year: selectedYear.value,
-        region: selectedRegion.value,
-        stream_tokens: true,
-      },
-      handleReportEvent,
-      { signal: nextController.signal },
-    );
-  } catch (error) {
-    if (nextController.signal.aborted) return;
-    const message = error instanceof Error ? error.message : "报告生成失败";
-    applyError(message);
-  } finally {
-    if (controller.value === nextController) {
-      controller.value = null;
-    }
-    if (!downloadUrl.value && !errorMessage.value) {
-      isGenerating.value = false;
-    }
-  }
+  await reportStore.startGenerate({
+    year: selectedYear.value,
+    region: selectedRegion.value,
+    reportType: selectedType.value,
+    reportTitle: reportTitle.value,
+  });
 }
 
 function openReportPdf() {
@@ -358,12 +253,8 @@ function handleEmptyTypeClick(type: ReportType) {
 watch(
   () => reportStore.activeHistory,
   (history) => {
-    if (isAddingHistory) return;
-    if (!history) {
-      if (!isGenerating.value) resetResultState();
-      return;
-    }
-    abortCurrentRequest();
+    if (reportStore.isAddingHistory) return;
+    if (!history) return;
     selectedType.value = history.type;
     if (history.year && yearOptions.includes(history.year as (typeof yearOptions)[number])) {
       selectedYear.value = history.year as (typeof yearOptions)[number];
@@ -374,24 +265,11 @@ watch(
     ) {
       selectedRegion.value = history.region as (typeof regionOptions)[number];
     }
-    generated.value = true;
-    isGenerating.value = false;
-    genTime.value = history.generatedAt;
-    filename.value = history.filename ?? history.title;
-    downloadUrl.value = history.downloadUrl ?? "";
-    errorMessage.value = "";
-    errorTraceback.value = "";
-    persistError.value = "";
-    currentTokenText.value = "";
   },
 );
 
 onMounted(() => {
   reportStore.loadReports();
-});
-
-onUnmounted(() => {
-  abortCurrentRequest();
 });
 </script>
 
@@ -696,16 +574,38 @@ onUnmounted(() => {
     left: 100%;
   }
 }
-.stream-frame {
-  width: min(520px, 100%);
-  min-height: 28px;
-  padding: 2px 8px;
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+  text-align: left;
+}
+.step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(74, 141, 183, 0.05);
+  border: 1px solid rgba(74, 141, 183, 0.12);
+}
+.step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--genshin-blue);
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+.step-text {
   color: #3a4a5c;
-  font-size: 12px;
-  line-height: 1.65;
-  text-align: center;
-  white-space: pre-wrap;
+  font-size: 12.5px;
+  line-height: 1.55;
   word-break: break-word;
+  flex: 1;
+  min-width: 0;
 }
 .pdf-preview-panel {
   display: flex;
